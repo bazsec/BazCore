@@ -1,0 +1,246 @@
+---------------------------------------------------------------------------
+-- BazCore: UI Module
+-- Colors, branded print, backdrop, fade, tooltip, draggable, status bar
+---------------------------------------------------------------------------
+
+---------------------------------------------------------------------------
+-- Color Palette
+---------------------------------------------------------------------------
+
+BazCore.colors = {
+    brand       = { 0.2, 0.6, 1.0 },
+    brandHex    = "3399ff",
+    bg          = { 0.05, 0.05, 0.08, 0.88 },
+    border      = { 0.3, 0.3, 0.35, 0.8 },
+    dim         = { 0.5, 0.5, 0.55 },
+    success     = { 0.3, 0.85, 0.3 },
+    error       = { 1.0, 0.3, 0.3 },
+    warning     = { 1.0, 0.8, 0.2 },
+    white       = { 1.0, 1.0, 1.0 },
+    tank        = { 0.3, 0.5, 1.0 },
+    healer      = { 0.3, 0.9, 0.3 },
+    dps         = { 0.9, 0.3, 0.3 },
+}
+
+-- Standard backdrop definition used across Baz addons
+BazCore.backdrop = {
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 12,
+    insets = { left = 2, right = 2, top = 2, bottom = 2 },
+}
+
+---------------------------------------------------------------------------
+-- Branded Print
+---------------------------------------------------------------------------
+
+local AddonMixin = BazCore.AddonMixin
+
+function AddonMixin:Print(...)
+    local displayName = self.config.title or self.name
+    local msg = table.concat({...}, " ")
+    print(string.format("|cff%s%s|r: %s", BazCore.colors.brandHex, displayName, msg))
+end
+
+function AddonMixin:Printf(fmt, ...)
+    local displayName = self.config.title or self.name
+    local msg = string.format(fmt, ...)
+    print(string.format("|cff%s%s|r: %s", BazCore.colors.brandHex, displayName, msg))
+end
+
+-- Static print (not tied to an addon)
+function BazCore:Print(...)
+    local msg = table.concat({...}, " ")
+    print(string.format("|cff%sBazCore|r: %s", self.colors.brandHex, msg))
+end
+
+---------------------------------------------------------------------------
+-- Panel Factory
+-- Creates a BackdropTemplate frame with the standard Baz dark theme
+---------------------------------------------------------------------------
+
+function BazCore:CreatePanel(parent, width, height)
+    local frame = CreateFrame("Frame", nil, parent or UIParent, "BackdropTemplate")
+    if width and height then
+        frame:SetSize(width, height)
+    end
+    frame:SetBackdrop(self.backdrop)
+    frame:SetBackdropColor(unpack(self.colors.bg))
+    frame:SetBackdropBorderColor(unpack(self.colors.border))
+    return frame
+end
+
+---------------------------------------------------------------------------
+-- Fade Helpers
+---------------------------------------------------------------------------
+
+function BazCore:FadeIn(frame, duration, toAlpha)
+    duration = duration or 0.3
+    toAlpha = toAlpha or 1.0
+    if not frame.bazFadeAG then
+        frame.bazFadeAG = frame:CreateAnimationGroup()
+        frame.bazFadeAnim = frame.bazFadeAG:CreateAnimation("Alpha")
+        frame.bazFadeAG:SetScript("OnFinished", function()
+            frame:SetAlpha(frame.bazFadeTarget or 1.0)
+        end)
+    end
+    frame.bazFadeAG:Stop()
+    frame.bazFadeTarget = toAlpha
+    frame.bazFadeAnim:SetFromAlpha(frame:GetAlpha())
+    frame.bazFadeAnim:SetToAlpha(toAlpha)
+    frame.bazFadeAnim:SetDuration(duration)
+    frame.bazFadeAnim:SetSmoothing("IN_OUT")
+    frame.bazFadeAG:Play()
+end
+
+function BazCore:FadeOut(frame, duration, onComplete)
+    duration = duration or 0.3
+    if not frame.bazFadeAG then
+        frame.bazFadeAG = frame:CreateAnimationGroup()
+        frame.bazFadeAnim = frame.bazFadeAG:CreateAnimation("Alpha")
+        frame.bazFadeAG:SetScript("OnFinished", function()
+            frame:SetAlpha(frame.bazFadeTarget or 0)
+            if frame.bazFadeOnComplete then
+                frame.bazFadeOnComplete()
+                frame.bazFadeOnComplete = nil
+            end
+        end)
+    end
+    frame.bazFadeAG:Stop()
+    frame.bazFadeTarget = 0
+    frame.bazFadeOnComplete = onComplete
+    frame.bazFadeAnim:SetFromAlpha(frame:GetAlpha())
+    frame.bazFadeAnim:SetToAlpha(0)
+    frame.bazFadeAnim:SetDuration(duration)
+    frame.bazFadeAnim:SetSmoothing("IN_OUT")
+    frame.bazFadeAG:Play()
+end
+
+---------------------------------------------------------------------------
+-- Tooltip Helper
+-- Attaches tooltip show/hide to a frame
+---------------------------------------------------------------------------
+
+function BazCore:Tooltip(frame, text, anchor)
+    anchor = anchor or "ANCHOR_TOP"
+
+    frame:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, anchor)
+        -- Support multi-line via \n
+        local lines = { strsplit("\n", text) }
+        GameTooltip:SetText(lines[1] or "", 1, 1, 1)
+        for i = 2, #lines do
+            GameTooltip:AddLine(lines[i], 0.8, 0.8, 0.8)
+        end
+        GameTooltip:Show()
+    end)
+
+    frame:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+end
+
+---------------------------------------------------------------------------
+-- Draggable Helper
+-- Makes a frame movable with position persistence via BazCore settings
+---------------------------------------------------------------------------
+
+function BazCore:MakeDraggable(frame, opts)
+    -- opts.addonName  (string) addon name for settings
+    -- opts.lockKey    (string) setting key for lock state
+    -- opts.posXKey    (string) setting key for X position
+    -- opts.posYKey    (string) setting key for Y position
+
+    local addonName = opts.addonName
+    local lockKey = opts.lockKey
+    local posXKey = opts.posXKey or "posX"
+    local posYKey = opts.posYKey or "posY"
+
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetClampedToScreen(true)
+
+    frame:SetScript("OnDragStart", function(self)
+        if lockKey and BazCore:GetSetting(addonName, lockKey) then return end
+        self:StartMoving()
+    end)
+
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local x, y = self:GetCenter()
+        local ux, uy = UIParent:GetCenter()
+        BazCore:SetSetting(addonName, posXKey, x - ux)
+        BazCore:SetSetting(addonName, posYKey, y - uy)
+    end)
+
+    -- Restore position on show
+    frame:HookScript("OnShow", function(self)
+        local x = BazCore:GetSetting(addonName, posXKey)
+        local y = BazCore:GetSetting(addonName, posYKey)
+        if x and y then
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "CENTER", x, y)
+        end
+    end)
+end
+
+---------------------------------------------------------------------------
+-- StatusBar Factory
+-- Creates a styled status bar with optional label and value text
+---------------------------------------------------------------------------
+
+function BazCore:CreateStatusBar(parent, opts)
+    opts = opts or {}
+    local width = opts.width or 200
+    local height = opts.height or 14
+    local color = opts.color or { 0.3, 0.85, 0.3 }
+    local bgColor = opts.bgColor or { 0.1, 0.1, 0.12, 0.8 }
+    local texture = opts.texture or "Interface\\TargetingFrame\\UI-StatusBar"
+    local minVal = opts.min or 0
+    local maxVal = opts.max or 1
+
+    local bar = CreateFrame("StatusBar", nil, parent or UIParent)
+    bar:SetSize(width, height)
+    bar:SetStatusBarTexture(texture)
+    bar:SetStatusBarColor(unpack(color))
+    bar:SetMinMaxValues(minVal, maxVal)
+    bar:SetValue(opts.value or minVal)
+
+    -- Background
+    local bg = bar:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(unpack(bgColor))
+    bar.bg = bg
+
+    -- Optional label (left side)
+    if opts.label then
+        local label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("LEFT", 4, 0)
+        label:SetText(opts.label)
+        label:SetTextColor(1, 1, 1)
+        bar.label = label
+    end
+
+    -- Optional value text (right side)
+    if opts.valueText then
+        local valText = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        valText:SetPoint("RIGHT", -4, 0)
+        valText:SetTextColor(1, 1, 1)
+        bar.valueText = valText
+    end
+
+    -- Convenience: update color
+    function bar:SetColor(r, g, b)
+        self:SetStatusBarColor(r, g, b)
+    end
+
+    -- Convenience: update value text
+    function bar:SetValueText(text)
+        if self.valueText then
+            self.valueText:SetText(text)
+        end
+    end
+
+    return bar
+end

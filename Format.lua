@@ -1,0 +1,159 @@
+---------------------------------------------------------------------------
+-- BazCore: Format Module
+-- Money, time, number, and text formatting utilities
+---------------------------------------------------------------------------
+
+local floor = math.floor
+
+---------------------------------------------------------------------------
+-- Money Formatting
+-- Converts copper amount to colored gold/silver/copper string
+---------------------------------------------------------------------------
+
+function BazCore:FormatMoney(copper)
+    if not copper or copper == 0 then
+        return "|cffeda55f0|rc"
+    end
+
+    local negative = copper < 0
+    copper = math.abs(copper)
+
+    local gold = floor(copper / 10000)
+    local silver = floor((copper % 10000) / 100)
+    local cop = copper % 100
+
+    local parts = {}
+    if gold > 0 then
+        table.insert(parts, string.format("|cffffd700%s|rg", self:FormatNumber(gold)))
+    end
+    if silver > 0 then
+        table.insert(parts, string.format("|cffc7c7cf%d|rs", silver))
+    end
+    if cop > 0 or #parts == 0 then
+        table.insert(parts, string.format("|cffeda55f%d|rc", cop))
+    end
+
+    local result = table.concat(parts, " ")
+    if negative then
+        result = "-" .. result
+    end
+    return result
+end
+
+---------------------------------------------------------------------------
+-- Time Formatting
+-- Precise time display (H:MM:SS or M:SS)
+---------------------------------------------------------------------------
+
+function BazCore:FormatTime(seconds)
+    if not seconds or seconds <= 0 then return "0:00" end
+    seconds = floor(seconds)
+
+    if seconds >= 3600 then
+        return string.format(
+            "%d:%02d:%02d",
+            floor(seconds / 3600),
+            floor((seconds % 3600) / 60),
+            seconds % 60
+        )
+    end
+    return string.format("%d:%02d", floor(seconds / 60), seconds % 60)
+end
+
+---------------------------------------------------------------------------
+-- Estimate Formatting
+-- Approximate time display (~5m, ~1h30m)
+---------------------------------------------------------------------------
+
+function BazCore:FormatEstimate(seconds)
+    if not seconds or seconds <= 0 then return "N/A" end
+    local m = math.ceil(seconds / 60)
+    if m >= 60 then
+        return string.format("~%dh%dm", floor(m / 60), m % 60)
+    end
+    return string.format("~%dm", m)
+end
+
+---------------------------------------------------------------------------
+-- Duration Formatting
+-- Human-readable duration (2d 5h 30m, 45s, etc.)
+---------------------------------------------------------------------------
+
+function BazCore:FormatDuration(seconds)
+    if not seconds or seconds <= 0 then return "0s" end
+    seconds = floor(seconds)
+
+    local days = floor(seconds / 86400)
+    local hours = floor((seconds % 86400) / 3600)
+    local mins = floor((seconds % 3600) / 60)
+    local secs = seconds % 60
+
+    if days > 0 then
+        return string.format("%dd %dh %dm", days, hours, mins)
+    elseif hours > 0 then
+        return string.format("%dh %dm", hours, mins)
+    elseif mins > 0 then
+        return string.format("%dm %ds", mins, secs)
+    else
+        return string.format("%ds", secs)
+    end
+end
+
+---------------------------------------------------------------------------
+-- Number Formatting
+-- Adds thousand separators (1,234,567)
+---------------------------------------------------------------------------
+
+function BazCore:FormatNumber(num)
+    if not num then return "0" end
+    local formatted = tostring(floor(num))
+    local k
+    while true do
+        formatted, k = formatted:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+        if k == 0 then break end
+    end
+    return formatted
+end
+
+---------------------------------------------------------------------------
+-- Short Number Formatting
+-- Compact display (1.2k, 3.5M, 1.1B)
+---------------------------------------------------------------------------
+
+function BazCore:FormatShortNumber(num)
+    if not num then return "0" end
+    local abs = math.abs(num)
+    local sign = num < 0 and "-" or ""
+
+    if abs >= 1e9 then
+        return string.format("%s%.1fB", sign, abs / 1e9)
+    elseif abs >= 1e6 then
+        return string.format("%s%.1fM", sign, abs / 1e6)
+    elseif abs >= 1e3 then
+        return string.format("%s%.1fk", sign, abs / 1e3)
+    else
+        return string.format("%s%d", sign, abs)
+    end
+end
+
+---------------------------------------------------------------------------
+-- Text Truncation
+---------------------------------------------------------------------------
+
+function BazCore:TruncateText(text, maxLen, suffix)
+    if not text then return "" end
+    maxLen = maxLen or 50
+    suffix = suffix or "..."
+    if #text <= maxLen then return text end
+    return strsub(text, 1, maxLen - #suffix) .. suffix
+end
+
+---------------------------------------------------------------------------
+-- Percentage Formatting
+---------------------------------------------------------------------------
+
+function BazCore:FormatPercent(value, decimals)
+    decimals = decimals or 0
+    if not value then return "0%" end
+    return string.format("%." .. decimals .. "f%%", value * 100)
+end
