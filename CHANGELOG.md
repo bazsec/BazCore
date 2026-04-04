@@ -1,5 +1,9 @@
 # BazCore Changelog
 
+## 006
+- Fixed grid snapping using wrong scale (GetEffectiveScale vs GetScale)
+- Snap preview lines and snap-on-drop now align correctly for scaled frames
+
 ## 005
 - Full Edit Mode framework for all Baz Suite addons
 - Blizzard-native nine-slice overlays (cyan highlight, yellow selected)

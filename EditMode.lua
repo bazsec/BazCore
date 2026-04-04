@@ -63,11 +63,11 @@ local function ShowSnapPreview(frame)
 
     local spacing = EditModeManagerFrame.Grid.gridSpacing
     local cx, cy = frame:GetCenter()
-    local es = frame:GetEffectiveScale()
+    local scale = frame:GetScale()
     if not (cx and cy and spacing > 0) then return end
 
-    cx = cx * es
-    cy = cy * es
+    cx = cx * scale
+    cy = cy * scale
 
     local gridCX, gridCY = EditModeManagerFrame.Grid:GetCenter()
     local relX = cx - gridCX
@@ -106,11 +106,11 @@ local function SnapToGrid(frame)
 
     local spacing = EditModeManagerFrame.Grid.gridSpacing
     local cx, cy = frame:GetCenter()
-    local es = frame:GetEffectiveScale()
+    local scale = frame:GetScale()
     if not (cx and cy and spacing > 0) then return end
 
-    cx = cx * es
-    cy = cy * es
+    cx = cx * scale
+    cy = cy * scale
 
     local gridCX, gridCY = EditModeManagerFrame.Grid:GetCenter()
     local relX = cx - gridCX
@@ -119,7 +119,7 @@ local function SnapToGrid(frame)
     local snapY = gridCY + math.floor(relY / spacing + 0.5) * spacing
 
     frame:ClearAllPoints()
-    frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", snapX / es, snapY / es)
+    frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", snapX / scale, snapY / scale)
 end
 
 ---------------------------------------------------------------------------
