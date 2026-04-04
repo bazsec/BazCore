@@ -1,5 +1,9 @@
 # BazCore Changelog
 
+## 007
+- Added `BazCore:MakeResizable()` — reusable drag-to-resize handle for any frame
+- Supports min/max scale, screen capping, custom get/set callbacks
+
 ## 006
 - Fixed grid snapping using wrong scale (GetEffectiveScale vs GetScale)
 - Snap preview lines and snap-on-drop now align correctly for scaled frames

@@ -186,6 +186,82 @@ function BazCore:MakeDraggable(frame, opts)
 end
 
 ---------------------------------------------------------------------------
+-- Resize Handle
+-- Adds a drag-to-resize grip to any frame
+---------------------------------------------------------------------------
+
+function BazCore:MakeResizable(frame, opts)
+    -- opts.minScale    (number) minimum scale percentage (default 30)
+    -- opts.maxScale    (number) max scale percentage, nil = screen cap
+    -- opts.getScale    (function) returns current scale percentage
+    -- opts.setScale    (function(pct)) called with new scale percentage
+    -- opts.onResize    (function(pct)) called during drag
+    -- opts.anchor      (string) "BOTTOMRIGHT" (default) or "BOTTOMLEFT"
+    -- opts.parent      (frame) parent for the handle (default = frame)
+
+    local minScale = opts.minScale or 30
+    local anchor = opts.anchor or "BOTTOMRIGHT"
+    local parent = opts.parent or frame
+
+    local resizer = CreateFrame("Button", nil, parent)
+    resizer:SetSize(16, 16)
+    resizer:SetPoint(anchor, parent, anchor, anchor == "BOTTOMRIGHT" and -1 or 1, 1)
+    resizer:SetFrameStrata("TOOLTIP")
+    resizer:SetFrameLevel(999)
+    resizer:EnableMouse(true)
+    resizer:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizer:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizer:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+
+    local lastX, lastY, currentScale
+
+    resizer:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
+        lastX, lastY = GetCursorPosition()
+        currentScale = opts.getScale and opts.getScale() or 100
+
+        self:SetScript("OnUpdate", function()
+            local cx, cy = GetCursorPosition()
+            local dx = cx - lastX
+            local dy = lastY - cy
+            lastX, lastY = cx, cy
+            local delta = (dx + dy) * 0.05
+
+            local maxPct = opts.maxScale
+            if not maxPct then
+                local w, h = frame:GetSize()
+                local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+                if w > 0 and h > 0 then
+                    maxPct = math.floor(math.min(screenW / w, screenH / h) * 100)
+                else
+                    maxPct = 200
+                end
+            end
+
+            currentScale = math.max(minScale, math.min(maxPct, currentScale + delta))
+            local rounded = math.floor(currentScale + 0.5)
+
+            if opts.setScale then
+                opts.setScale(rounded)
+            end
+            if opts.onResize then
+                opts.onResize(rounded)
+            end
+        end)
+    end)
+
+    resizer:SetScript("OnMouseUp", function(self)
+        self:SetScript("OnUpdate", nil)
+        if opts.onStop then
+            opts.onStop(currentScale and math.floor(currentScale + 0.5) or 100)
+        end
+    end)
+
+    frame._bazResizer = resizer
+    return resizer
+end
+
+---------------------------------------------------------------------------
 -- StatusBar Factory
 -- Creates a styled status bar with optional label and value text
 ---------------------------------------------------------------------------
