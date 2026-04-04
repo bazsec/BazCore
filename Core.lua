@@ -6,7 +6,7 @@
 BazCore = BazCore or {}
 BazCore.addons = {}
 BazCore.addonObjects = {}
-BazCore.VERSION = "001"
+BazCore.VERSION = "004"
 
 ---------------------------------------------------------------------------
 -- Addon Object Prototype
@@ -114,3 +114,58 @@ end
 function BazCore:GetAddon(name)
     return self.addonObjects[name]
 end
+
+---------------------------------------------------------------------------
+-- BazCore's own settings page (registered after all modules load)
+---------------------------------------------------------------------------
+
+BazCore:QueueForLogin(function()
+    if not BazCore.RegisterOptionsTable then return end
+
+    BazCoreDB = BazCoreDB or {}
+    BazCoreDB.minimap = BazCoreDB.minimap or { hide = false }
+
+    BazCore:RegisterOptionsTable("BazCore", function()
+        return {
+            name = "BazCore",
+            subtitle = "Shared framework for Baz addons (v" .. BazCore.VERSION .. ")",
+            type = "group",
+            args = {
+                minimapBtn = {
+                    order = 1,
+                    type = "toggle",
+                    name = "Show Minimap Button",
+                    desc = "Show or hide the shared Baz minimap button",
+                    get = function() return not BazCoreDB.minimap.hide end,
+                    set = function(_, val)
+                        BazCoreDB.minimap.hide = not val
+                        if val then
+                            BazCore:ShowMinimapButton()
+                        else
+                            BazCore:HideMinimapButton()
+                        end
+                    end,
+                },
+                registeredHeader = {
+                    order = 10,
+                    type = "header",
+                    name = "Registered Addons",
+                },
+                registeredList = {
+                    order = 11,
+                    type = "description",
+                    name = (function()
+                        local names = {}
+                        for n, config in pairs(BazCore.addons) do
+                            names[#names + 1] = (config.title or n)
+                        end
+                        table.sort(names)
+                        if #names == 0 then return "No addons registered yet." end
+                        return table.concat(names, ", ")
+                    end)(),
+                },
+            },
+        }
+    end)
+    BazCore:AddToSettings("BazCore", "BazCore")
+end)

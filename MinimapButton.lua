@@ -47,11 +47,7 @@ local function ShowMenu()
             local entry = item.entry
             local label = entry.label or item.name
             rootDescription:CreateButton(label, function()
-                if entry.onClick then
-                    entry.onClick()
-                else
-                    BazCore:OpenSettings(item.name)
-                end
+                BazCore:OpenOptionsPanel(item.name)
             end)
         end
     end)
@@ -106,7 +102,7 @@ local function CreateButton()
             -- Right-click: quick settings for the first addon, or BazCore settings
             local firstName = next(minimapEntries)
             if firstName then
-                BazCore:OpenSettings(firstName)
+                BazCore:OpenOptionsPanel(firstName)
             end
         end
     end)

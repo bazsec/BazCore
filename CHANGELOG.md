@@ -1,6 +1,6 @@
 # BazCore Changelog
 
-## 003
-- Added profile rename (type new name in the Profile Name field, press Enter)
-- Cannot rename the Default profile
-- Rename updates active profile, assignments, and refreshes the panel
+## 004
+- Added BazCore settings page (minimap toggle, registered addons list)
+- Fixed minimap dropdown not opening addon settings
+- Minimap button visibility is now controlled from BazCore settings, not per-addon
