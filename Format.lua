@@ -1,6 +1,6 @@
 ---------------------------------------------------------------------------
 -- BazCore: Format Module
--- Money, time, number, and text formatting utilities
+-- Money, time, number, text formatting, and safe string utilities
 ---------------------------------------------------------------------------
 
 local floor = math.floor
@@ -156,4 +156,25 @@ function BazCore:FormatPercent(value, decimals)
     decimals = decimals or 0
     if not value then return "0%" end
     return string.format("%." .. decimals .. "f%%", value * 100)
+end
+
+---------------------------------------------------------------------------
+-- Safe String Utilities
+-- Midnight (12.0) marks some strings as "secret values" which can't be
+-- indexed or matched directly. These helpers convert to plain strings first.
+---------------------------------------------------------------------------
+
+function BazCore:SafeMatch(str, pattern)
+    if not str then return nil end
+    return tostring(str):match(pattern)
+end
+
+function BazCore:SafeFind(str, pattern, init, plain)
+    if not str then return nil end
+    return tostring(str):find(pattern, init, plain)
+end
+
+function BazCore:SafeString(str)
+    if not str then return "" end
+    return tostring(str)
 end

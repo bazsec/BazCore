@@ -1,5 +1,8 @@
 # BazCore Changelog
 
+## 008
+- Added `BazCore:SafeMatch()`, `BazCore:SafeFind()`, `BazCore:SafeString()` for Midnight secret string taint handling
+
 ## 007
 - Added `BazCore:MakeResizable()` — reusable drag-to-resize handle for any frame
 - Supports min/max scale, screen capping, custom get/set callbacks
