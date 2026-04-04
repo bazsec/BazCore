@@ -267,6 +267,45 @@ function BazCore:DeleteProfile(addonName, profileName)
     return true
 end
 
+function BazCore:RenameProfile(addonName, oldName, newName)
+    local config = self.addons[addonName]
+    if not config then return false end
+    local sv = _G[config.savedVariable]
+    if not sv or not sv.profiles then return false end
+
+    if not oldName or not newName or oldName == "" or newName == "" then return false end
+    if oldName == newName then return true end
+    if oldName == DEFAULT_PROFILE then return false end -- can't rename Default
+    if sv.profiles[newName] then return false end -- name already taken
+
+    -- Copy data to new key
+    sv.profiles[newName] = sv.profiles[oldName]
+    sv.profiles[oldName] = nil
+
+    -- Update active profile reference
+    if sv.activeProfile == oldName then
+        sv.activeProfile = newName
+    end
+
+    -- Update assignments
+    if sv.assignments then
+        for scope, tbl in pairs(sv.assignments) do
+            if type(tbl) == "table" then
+                for key, assignedProfile in pairs(tbl) do
+                    if assignedProfile == oldName then
+                        tbl[key] = newName
+                    end
+                end
+            elseif tbl == oldName then
+                sv.assignments[scope] = newName
+            end
+        end
+    end
+
+    BazCore:Fire("BAZ_PROFILE_RENAMED", addonName, oldName, newName)
+    return true
+end
+
 function BazCore:ResetProfile(addonName, profileName)
     local config = self.addons[addonName]
     if not config then return false end
@@ -407,6 +446,27 @@ function BazCore:GetProfileOptionsTable(addonName)
                         order = 1,
                         type = "header",
                         name = "Profile: " .. profileName,
+                    },
+                    rename = {
+                        order = 1.5,
+                        type = "input",
+                        name = isDefault and "Profile Name (cannot rename Default)" or "Profile Name",
+                        desc = isDefault and "" or "Type a new name and press Enter to rename",
+                        get = function() return profileName end,
+                        set = function(_, val)
+                            if isDefault then
+                                BazCore:Print("Cannot rename the Default profile.")
+                                return
+                            end
+                            if val and val ~= "" and val ~= profileName then
+                                if BazCore:RenameProfile(addonName, profileName, val) then
+                                    BazCore:Print("Renamed '" .. profileName .. "' to '" .. val .. "'")
+                                    RefreshProfilesPanel()
+                                else
+                                    BazCore:Print("Could not rename: name may already exist.")
+                                end
+                            end
+                        end,
                     },
                     activate = {
                         order = 2,
