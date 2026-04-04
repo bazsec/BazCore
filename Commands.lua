@@ -39,6 +39,8 @@ function BazCore:RegisterCommands(addonName, config)
         if cmd == "" then
             if config.defaultHandler then
                 config.defaultHandler()
+            elseif BazCore.OpenOptionsPanel then
+                BazCore:OpenOptionsPanel(addonName)
             else
                 BazCore:OpenSettings(addonName)
             end

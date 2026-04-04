@@ -1,20 +1,21 @@
 ---------------------------------------------------------------------------
 -- BazCore: OptionsPanel Module
--- Rich options table renderer (replaces AceConfig + AceConfigDialog)
--- Supports: group, toggle, range, select, input, execute, description, header
+-- Two-panel options renderer: list on left, settings on right
 ---------------------------------------------------------------------------
 
-local optionsTables = {}  -- [addonName] = { func, category, frame, parentName }
-
+local optionsTables = {}
+BazCore._optionsTables = optionsTables -- expose for cross-module refresh
 local PAD = 12
 local WIDGET_HEIGHT = 28
 local HEADER_HEIGHT = 24
 local SPACING = 6
+local LIST_WIDTH = 160
+local LIST_ITEM_HEIGHT = 24
 local DESC_FONT = "GameFontHighlightSmall"
 local LABEL_FONT = "GameFontHighlight"
 
 ---------------------------------------------------------------------------
--- Utility: sort args by order
+-- Sort args by order
 ---------------------------------------------------------------------------
 
 local function SortedArgs(args)
@@ -22,70 +23,57 @@ local function SortedArgs(args)
     local sorted = {}
     for key, opt in pairs(args) do
         opt._key = key
-        table.insert(sorted, opt)
+        sorted[#sorted + 1] = opt
     end
-    table.sort(sorted, function(a, b)
-        return (a.order or 100) < (b.order or 100)
-    end)
+    table.sort(sorted, function(a, b) return (a.order or 100) < (b.order or 100) end)
     return sorted
 end
 
 ---------------------------------------------------------------------------
--- Widget Factories
--- Each returns (frame, height)
+-- Widget Factories — each returns (frame, height)
 ---------------------------------------------------------------------------
 
 local function CreateDescriptionWidget(parent, opt, contentWidth)
-    local fs = parent:CreateFontString(nil, "OVERLAY", DESC_FONT)
+    local frame = CreateFrame("Frame", nil, parent)
+    local fs = frame:CreateFontString(nil, "OVERLAY", DESC_FONT)
+    fs:SetPoint("TOPLEFT")
     fs:SetWidth(contentWidth)
     fs:SetJustifyH("LEFT")
     fs:SetText(opt.name or "")
-    if opt.fontSize == "medium" then
-        fs:SetFontObject(GameFontNormal)
-    end
+    if opt.fontSize == "medium" then fs:SetFontObject(GameFontNormal) end
     fs:SetWordWrap(true)
-    local h = fs:GetStringHeight()
-    return fs, math.max(h, 8)
+    local h = math.max(fs:GetStringHeight() + 4, 12)
+    frame:SetSize(contentWidth, h)
+    return frame, h
 end
 
 local function CreateHeaderWidget(parent, opt, contentWidth)
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetSize(contentWidth, HEADER_HEIGHT)
-
-    -- Header text
     local text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     text:SetPoint("LEFT", 0, 0)
     text:SetText(opt.name or "")
-    text:SetTextColor(0.2, 0.6, 1.0)
-
-    -- Divider line
+    text:SetTextColor(1, 0.82, 0)
     if opt.name and opt.name ~= "" then
         local line = frame:CreateTexture(nil, "ARTWORK")
         line:SetHeight(1)
         line:SetPoint("LEFT", text, "RIGHT", 8, 0)
         line:SetPoint("RIGHT", frame, "RIGHT")
-        line:SetColorTexture(0.3, 0.3, 0.35, 0.6)
+        line:SetColorTexture(0.4, 0.4, 0.4, 0.4)
     end
-
     return frame, HEADER_HEIGHT
 end
 
 local function CreateToggleWidget(parent, opt, contentWidth)
+    local height = WIDGET_HEIGHT
     local frame = CreateFrame("Frame", nil, parent)
-    frame:SetSize(contentWidth, WIDGET_HEIGHT)
-
     local cb = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     cb:SetPoint("LEFT", 0, 0)
     cb:SetSize(20, 20)
-
-    if opt.get then
-        cb:SetChecked(opt.get())
-    end
-
+    if opt.get then cb:SetChecked(opt.get()) end
     local label = frame:CreateFontString(nil, "OVERLAY", LABEL_FONT)
     label:SetPoint("LEFT", cb, "RIGHT", 4, 0)
     label:SetText(opt.name or "")
-
     if opt.desc then
         local desc = frame:CreateFontString(nil, "OVERLAY", DESC_FONT)
         desc:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
@@ -93,72 +81,42 @@ local function CreateToggleWidget(parent, opt, contentWidth)
         desc:SetJustifyH("LEFT")
         desc:SetText(opt.desc)
         desc:SetTextColor(0.5, 0.5, 0.5)
-        local extra = desc:GetStringHeight()
-        frame:SetHeight(WIDGET_HEIGHT + extra)
+        height = height + desc:GetStringHeight() + 2
     end
-
-    cb:SetScript("OnClick", function(self)
-        if opt.set then
-            opt.set(nil, self:GetChecked())
-        end
-    end)
-
-    return frame, frame:GetHeight()
+    frame:SetSize(contentWidth, height)
+    cb:SetScript("OnClick", function(self) if opt.set then opt.set(nil, self:GetChecked()) end end)
+    return frame, height
 end
 
 local function CreateRangeWidget(parent, opt, contentWidth)
     local height = 50
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetSize(contentWidth, height)
-
     local label = frame:CreateFontString(nil, "OVERLAY", LABEL_FONT)
     label:SetPoint("TOPLEFT", 0, 0)
     label:SetText(opt.name or "")
-
     local slider = CreateFrame("Frame", nil, frame, "MinimalSliderWithSteppersTemplate")
     slider:SetPoint("TOPLEFT", 0, -18)
     slider:SetWidth(contentWidth - 60)
     slider.Slider:SetMinMaxValues(opt.min or 0, opt.max or 100)
     slider.Slider:SetValueStep(opt.step or 1)
     slider.Slider:SetObeyStepOnDrag(true)
-
     local currentVal = opt.get and opt.get() or opt.min or 0
     slider.Slider:SetValue(currentVal)
-
     local valText = frame:CreateFontString(nil, "OVERLAY", LABEL_FONT)
     valText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
-
     local function FormatValue(v)
-        if opt.isPercent then
-            return string.format("%d%%", v * 100)
-        elseif opt.step and opt.step < 1 then
-            return string.format("%.2f", v)
-        else
-            return tostring(math.floor(v))
-        end
+        if opt.isPercent then return string.format("%d%%", v * 100)
+        elseif opt.step and opt.step < 1 then return string.format("%.2f", v)
+        else return tostring(math.floor(v)) end
     end
     valText:SetText(FormatValue(currentVal))
-
     slider.Slider:SetScript("OnValueChanged", function(_, value)
         local step = opt.step or 1
         value = math.floor(value / step + 0.5) * step
         valText:SetText(FormatValue(value))
-        if opt.set then
-            opt.set(nil, value)
-        end
+        if opt.set then opt.set(nil, value) end
     end)
-
-    if opt.desc then
-        local desc = frame:CreateFontString(nil, "OVERLAY", DESC_FONT)
-        desc:SetPoint("TOPLEFT", slider, "BOTTOMLEFT", 0, -4)
-        desc:SetWidth(contentWidth)
-        desc:SetJustifyH("LEFT")
-        desc:SetText(opt.desc)
-        desc:SetTextColor(0.5, 0.5, 0.5)
-        height = height + desc:GetStringHeight() + 4
-        frame:SetHeight(height)
-    end
-
     return frame, height
 end
 
@@ -166,82 +124,55 @@ local function CreateInputWidget(parent, opt, contentWidth)
     local height = 46
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetSize(contentWidth, height)
-
     local label = frame:CreateFontString(nil, "OVERLAY", LABEL_FONT)
     label:SetPoint("TOPLEFT", 0, 0)
     label:SetText(opt.name or "")
-
     local editBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
     editBox:SetPoint("TOPLEFT", 0, -16)
     editBox:SetSize(contentWidth - 10, 24)
     editBox:SetAutoFocus(false)
     editBox:SetFontObject(ChatFontNormal)
-
-    if opt.get then
-        editBox:SetText(opt.get() or "")
-    end
-
+    if opt.get then editBox:SetText(opt.get() or "") end
     editBox:SetScript("OnEnterPressed", function(self)
-        if opt.set then
-            opt.set(nil, self:GetText())
-        end
+        if opt.set then opt.set(nil, self:GetText()) end
         self:ClearFocus()
     end)
     editBox:SetScript("OnEscapePressed", function(self)
-        if opt.get then
-            self:SetText(opt.get() or "")
-        end
+        if opt.get then self:SetText(opt.get() or "") end
         self:ClearFocus()
     end)
-
     return frame, height
 end
 
 local function CreateExecuteWidget(parent, opt, contentWidth)
     local frame = CreateFrame("Frame", nil, parent)
-    local btnWidth = contentWidth
-    if opt.width and opt.width ~= "full" then
-        btnWidth = contentWidth * (tonumber(opt.width) or 1)
-    end
     frame:SetSize(contentWidth, WIDGET_HEIGHT + 4)
-
+    local btnWidth = math.min(220, contentWidth)
     local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     btn:SetPoint("LEFT", 0, 0)
-    btn:SetSize(math.min(btnWidth, contentWidth), WIDGET_HEIGHT)
+    btn:SetSize(btnWidth, WIDGET_HEIGHT)
     btn:SetText(opt.name or "Execute")
-
     btn:SetScript("OnClick", function()
         if opt.confirm then
-            local text = opt.confirmText or ("Are you sure?")
             StaticPopupDialogs["BAZCORE_CONFIRM_EXEC"] = {
-                text = text,
-                button1 = "Yes",
-                button2 = "No",
-                OnAccept = function()
-                    if opt.func then opt.func() end
-                end,
-                timeout = 0,
-                whileDead = true,
-                hideOnEscape = true,
+                text = opt.confirmText or "Are you sure?",
+                button1 = "Yes", button2 = "No",
+                OnAccept = function() if opt.func then opt.func() end end,
+                timeout = 0, whileDead = true, hideOnEscape = true,
             }
             StaticPopup_Show("BAZCORE_CONFIRM_EXEC")
         else
             if opt.func then opt.func() end
         end
     end)
-
-    -- Tooltip
     if opt.desc then
         btn:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_TOP")
             GameTooltip:SetText(opt.desc, nil, nil, nil, nil, true)
             GameTooltip:Show()
         end)
-        btn:SetScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
+        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     end
-
     return frame, WIDGET_HEIGHT + 4
 end
 
@@ -249,28 +180,37 @@ local function CreateSelectWidget(parent, opt, contentWidth)
     local height = 46
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetSize(contentWidth, height)
-
     local label = frame:CreateFontString(nil, "OVERLAY", LABEL_FONT)
     label:SetPoint("TOPLEFT", 0, 0)
     label:SetText(opt.name or "")
-
-    -- Dropdown button
     local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     btn:SetPoint("TOPLEFT", 0, -16)
     btn:SetSize(200, 24)
-
     local function GetCurrentLabel()
         local val = opt.get and opt.get()
         local values = opt.values or {}
         if type(values) == "function" then values = values() end
-        return values[val] or tostring(val or "")
+        if val and val ~= "" and values[val] then
+            return values[val]
+        end
+        -- Check if there are any values at all
+        if not next(values) then
+            return "|cff666666None available|r"
+        end
+        return "|cff999999Select...|r"
     end
     btn:SetText(GetCurrentLabel())
+
+    local function HasValues()
+        local values = opt.values or {}
+        if type(values) == "function" then values = values() end
+        return next(values) ~= nil
+    end
 
     btn:SetScript("OnClick", function(self)
         local values = opt.values or {}
         if type(values) == "function" then values = values() end
-
+        if not next(values) then return end
         MenuUtil.CreateContextMenu(self, function(_, rootDescription)
             for value, text in pairs(values) do
                 rootDescription:CreateButton(text, function()
@@ -280,25 +220,7 @@ local function CreateSelectWidget(parent, opt, contentWidth)
             end
         end)
     end)
-
     return frame, height
-end
-
----------------------------------------------------------------------------
--- Layout Engine
--- Renders a sorted list of options into a parent frame
----------------------------------------------------------------------------
-
-local function ClearChildren(frame)
-    -- Hide and release all child frames/fontstrings
-    for _, child in pairs({ frame:GetChildren() }) do
-        child:Hide()
-        child:SetParent(nil)
-    end
-    for _, region in pairs({ frame:GetRegions() }) do
-        region:Hide()
-        region:SetParent(nil)
-    end
 end
 
 local widgetFactories = {
@@ -311,52 +233,36 @@ local widgetFactories = {
     select      = CreateSelectWidget,
 }
 
-local function RenderGroup(parent, args, contentWidth, yOffset, depth)
-    depth = depth or 0
+---------------------------------------------------------------------------
+-- Clear all children from a frame
+---------------------------------------------------------------------------
+
+local function ClearChildren(frame)
+    for _, child in pairs({ frame:GetChildren() }) do
+        child:Hide()
+        child:ClearAllPoints()
+        child:SetParent(nil)
+    end
+    for _, region in pairs({ frame:GetRegions() }) do
+        region:Hide()
+        region:SetParent(nil)
+    end
+end
+
+---------------------------------------------------------------------------
+-- Render flat widgets (non-group args) into a parent frame
+---------------------------------------------------------------------------
+
+local function RenderWidgets(parent, args, contentWidth)
     local sorted = SortedArgs(args)
-    local indent = depth * 16
+    local yOffset = -PAD
 
     for _, opt in ipairs(sorted) do
-        if opt.type == "group" then
-            -- Render group header
-            local headerFrame = CreateFrame("Frame", nil, parent)
-            headerFrame:SetSize(contentWidth, HEADER_HEIGHT)
-            headerFrame:SetPoint("TOPLEFT", PAD + indent, yOffset)
-
-            local headerText = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-            headerText:SetPoint("LEFT", 0, 0)
-            headerText:SetText(opt.name or "")
-            headerText:SetTextColor(0.2, 0.6, 1.0)
-
-            local line = headerFrame:CreateTexture(nil, "ARTWORK")
-            line:SetHeight(1)
-            line:SetPoint("LEFT", headerText, "RIGHT", 8, 0)
-            line:SetPoint("RIGHT", headerFrame, "RIGHT")
-            line:SetColorTexture(0.3, 0.3, 0.35, 0.6)
-
-            yOffset = yOffset - HEADER_HEIGHT - SPACING
-
-            -- Render group children
-            if opt.args then
-                yOffset = RenderGroup(parent, opt.args, contentWidth, yOffset, depth + 1)
-            end
-
-            yOffset = yOffset - SPACING
-        else
+        if opt.type ~= "group" then
             local factory = widgetFactories[opt.type]
             if factory then
-                local widget, h = factory(parent, opt, contentWidth - indent)
-                if type(widget.SetPoint) == "function" then
-                    widget:SetPoint("TOPLEFT", PAD + indent, yOffset)
-                else
-                    -- FontString — wrap in a holder frame
-                    local holder = CreateFrame("Frame", nil, parent)
-                    holder:SetSize(contentWidth - indent, h)
-                    holder:SetPoint("TOPLEFT", PAD + indent, yOffset)
-                    widget:SetParent(holder)
-                    widget:ClearAllPoints()
-                    widget:SetPoint("TOPLEFT", 0, 0)
-                end
+                local widget, h = factory(parent, opt, contentWidth)
+                widget:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
                 widget:Show()
                 yOffset = yOffset - h - SPACING
             end
@@ -367,7 +273,366 @@ local function RenderGroup(parent, args, contentWidth, yOffset, depth)
 end
 
 ---------------------------------------------------------------------------
--- Canvas Panel with ScrollFrame
+-- Check if a group has child groups
+---------------------------------------------------------------------------
+
+local function HasChildGroups(args)
+    if not args then return false end
+    for _, opt in pairs(args) do
+        if opt.type == "group" then return true end
+    end
+    return false
+end
+
+---------------------------------------------------------------------------
+-- Two-Panel Layout
+---------------------------------------------------------------------------
+
+local function CreateTwoPanelLayout(container, optionsTable)
+    ClearChildren(container)
+
+    local args = optionsTable.args or {}
+    local contentWidth = container:GetWidth()
+    if contentWidth <= 0 then contentWidth = 620 end
+
+    -- Categorize args
+    local topArgs = {}
+    local groupArgs = {}
+    local executeArgs = {}
+    local sorted = SortedArgs(args)
+
+    -- First pass: check if we have any two-panel groups
+    local hasTwoPanelGroups = false
+    for _, opt in ipairs(sorted) do
+        if opt.type == "group" and HasChildGroups(opt.args) then
+            hasTwoPanelGroups = true
+            break
+        end
+    end
+
+    for _, opt in ipairs(sorted) do
+        if opt.type == "group" and HasChildGroups(opt.args) then
+            groupArgs[#groupArgs + 1] = opt
+        elseif hasTwoPanelGroups and opt.type == "execute" then
+            -- Only separate execute buttons when there's a two-panel group (for the list panel)
+            executeArgs[#executeArgs + 1] = opt
+        elseif hasTwoPanelGroups and opt.type == "description" then
+            -- Skip descriptions on two-panel pages (subtitle handles it)
+        else
+            topArgs[#topArgs + 1] = opt
+        end
+    end
+
+    local yOffset = 0
+
+    -- Title bar
+    local titleFrame = CreateFrame("Frame", nil, container)
+    titleFrame:SetSize(contentWidth, 36)
+    titleFrame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, yOffset)
+    titleFrame:Show()
+
+    local titleText = titleFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    titleText:SetPoint("LEFT", PAD, 0)
+    titleText:SetText(optionsTable.name or "")
+    titleText:SetTextColor(1, 0.82, 0)
+
+    -- Subtitle (from options table, not from description args)
+    if optionsTable.subtitle then
+        local subText = titleFrame:CreateFontString(nil, "OVERLAY", DESC_FONT)
+        subText:SetPoint("LEFT", titleText, "RIGHT", 10, 0)
+        subText:SetText("- " .. optionsTable.subtitle)
+        subText:SetTextColor(0.5, 0.5, 0.5)
+    end
+
+    -- Title toggle (right-aligned checkbox in title bar)
+    if optionsTable.titleToggle then
+        local tt = optionsTable.titleToggle
+        local cb = CreateFrame("CheckButton", nil, titleFrame, "UICheckButtonTemplate")
+        cb:SetSize(20, 20)
+        cb:SetPoint("RIGHT", titleFrame, "RIGHT", -PAD - 4, 0)
+        if tt.get then cb:SetChecked(tt.get()) end
+        cb:SetScript("OnClick", function(self)
+            if tt.set then tt.set(nil, self:GetChecked()) end
+        end)
+        local cbLabel = titleFrame:CreateFontString(nil, "OVERLAY", DESC_FONT)
+        cbLabel:SetPoint("RIGHT", cb, "LEFT", -4, 0)
+        cbLabel:SetText(tt.name or "")
+        cbLabel:SetTextColor(0.7, 0.7, 0.7)
+    end
+
+    local titleLine = titleFrame:CreateTexture(nil, "ARTWORK")
+    titleLine:SetHeight(1)
+    titleLine:SetPoint("BOTTOMLEFT", PAD, 0)
+    titleLine:SetPoint("BOTTOMRIGHT", -PAD, 0)
+    titleLine:SetColorTexture(0.4, 0.4, 0.4, 0.4)
+
+    yOffset = yOffset - 40
+
+    -- Top-level widgets
+    for _, opt in ipairs(topArgs) do
+        if opt.type == "group" and opt.inline then
+            -- Inline group: bordered panel with header and children
+            local panelPad = 10
+            local innerWidth = contentWidth - PAD * 2 - panelPad * 2
+
+            -- Measure children height first
+            local childHeight = PAD
+            local childSorted = SortedArgs(opt.args)
+            for _, childOpt in ipairs(childSorted) do
+                local factory = widgetFactories[childOpt.type]
+                if factory then
+                    local _, h = factory(container, childOpt, innerWidth)
+                    childHeight = childHeight + h + SPACING
+                end
+            end
+            childHeight = childHeight + HEADER_HEIGHT + 8
+
+            -- Panel frame
+            local panel = CreateFrame("Frame", nil, container, "BackdropTemplate")
+            panel:SetSize(contentWidth - PAD * 2, childHeight)
+            panel:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+            panel:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                edgeSize = 8, insets = { left = 2, right = 2, top = 2, bottom = 2 },
+            })
+            panel:SetBackdropColor(0.04, 0.04, 0.06, 0.4)
+            panel:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.5)
+            panel:Show()
+
+            -- Panel header
+            local panelTitle = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            panelTitle:SetPoint("TOPLEFT", panelPad, -panelPad)
+            panelTitle:SetText(opt.name or "")
+            panelTitle:SetTextColor(1, 0.82, 0)
+
+            local panelLine = panel:CreateTexture(nil, "ARTWORK")
+            panelLine:SetHeight(1)
+            panelLine:SetPoint("LEFT", panelTitle, "RIGHT", 8, 0)
+            panelLine:SetPoint("RIGHT", panel, "RIGHT", -panelPad, 0)
+            panelLine:SetColorTexture(0.4, 0.4, 0.4, 0.3)
+
+            -- Render children inside panel
+            local innerY = -(panelPad + HEADER_HEIGHT)
+            for _, childOpt in ipairs(childSorted) do
+                local factory = widgetFactories[childOpt.type]
+                if factory then
+                    local widget, h = factory(panel, childOpt, innerWidth)
+                    widget:SetPoint("TOPLEFT", panel, "TOPLEFT", panelPad, innerY)
+                    widget:Show()
+                    innerY = innerY - h - SPACING
+                end
+            end
+
+            yOffset = yOffset - childHeight - SPACING
+        elseif opt.type == "group" then
+            -- Non-inline group: header + flat children
+            local hdr, hh = CreateHeaderWidget(container, opt, contentWidth - PAD * 2)
+            hdr:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+            hdr:Show()
+            yOffset = yOffset - hh - SPACING
+            if opt.args then
+                local innerSorted = SortedArgs(opt.args)
+                for _, innerOpt in ipairs(innerSorted) do
+                    local factory = widgetFactories[innerOpt.type]
+                    if factory then
+                        local widget, h = factory(container, innerOpt, contentWidth - PAD * 2)
+                        widget:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+                        widget:Show()
+                        yOffset = yOffset - h - SPACING
+                    end
+                end
+            end
+        else
+            local factory = widgetFactories[opt.type]
+            if factory then
+                local widget, h = factory(container, opt, contentWidth - PAD * 2)
+                widget:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+                widget:Show()
+                yOffset = yOffset - h - SPACING
+            end
+        end
+    end
+
+    -- Two-panel groups
+    for _, groupOpt in ipairs(groupArgs) do
+        -- Section header
+        local hdr, hh = CreateHeaderWidget(container, groupOpt, contentWidth - PAD * 2)
+        hdr:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+        hdr:Show()
+        yOffset = yOffset - hh - 4
+
+        -- Split frame — anchors to bottom of container to fill space
+        local splitFrame = CreateFrame("Frame", nil, container)
+        splitFrame:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+        splitFrame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -PAD, PAD)
+        splitFrame:Show()
+
+        -- Left: list panel
+        local listBg = CreateFrame("Frame", nil, splitFrame, "BackdropTemplate")
+        listBg:SetPoint("TOPLEFT", 0, 0)
+        listBg:SetPoint("BOTTOMLEFT", 0, 0)
+        listBg:SetWidth(LIST_WIDTH)
+        listBg:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 8, insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        })
+        listBg:SetBackdropColor(0.03, 0.03, 0.05, 0.6)
+        listBg:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.5)
+
+        -- Execute buttons at top of list (e.g. Create New Bar)
+        local listTopY = -6
+        for _, execOpt in ipairs(executeArgs) do
+            local execBtn = CreateFrame("Button", nil, listBg, "UIPanelButtonTemplate")
+            execBtn:SetSize(LIST_WIDTH - 12, 22)
+            execBtn:SetPoint("TOPLEFT", listBg, "TOPLEFT", 6, listTopY)
+            execBtn:SetText(execOpt.name or "")
+            execBtn:SetScript("OnClick", function()
+                if execOpt.func then execOpt.func() end
+            end)
+            local fs = execBtn:GetFontString()
+            if fs then fs:SetFontObject("GameFontHighlightSmall") end
+            execBtn:Show()
+            listTopY = listTopY - 26
+        end
+
+        -- List scroll
+        local listScroll = CreateFrame("ScrollFrame", nil, listBg, "UIPanelScrollFrameTemplate")
+        listScroll:SetPoint("TOPLEFT", 4, listTopY - 2)
+        listScroll:SetPoint("BOTTOMRIGHT", -20, 4)
+
+        local listContent = CreateFrame("Frame", nil, listScroll)
+        listContent:SetWidth(LIST_WIDTH - 26)
+        listScroll:SetScrollChild(listContent)
+
+        -- Right: detail panel
+        local detailFrame = CreateFrame("Frame", nil, splitFrame, "BackdropTemplate")
+        detailFrame:SetPoint("TOPLEFT", listBg, "TOPRIGHT", 4, 0)
+        detailFrame:SetPoint("BOTTOMRIGHT", 0, 0)
+        detailFrame:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            edgeSize = 8, insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        })
+        detailFrame:SetBackdropColor(0.04, 0.04, 0.06, 0.4)
+        detailFrame:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.5)
+
+        local detailScroll = CreateFrame("ScrollFrame", nil, detailFrame, "UIPanelScrollFrameTemplate")
+        detailScroll:SetPoint("TOPLEFT", 4, -4)
+        detailScroll:SetPoint("BOTTOMRIGHT", -20, 4)
+
+        local detailContent = CreateFrame("Frame", nil, detailScroll)
+        detailContent:SetWidth(detailFrame:GetWidth() - 28)
+        detailScroll:SetScrollChild(detailContent)
+
+        -- Gather child groups
+        local childGroups = {}
+        local childSorted = SortedArgs(groupOpt.args)
+        for _, child in ipairs(childSorted) do
+            if child.type == "group" then
+                childGroups[#childGroups + 1] = child
+            end
+        end
+
+        local selectedItem = nil
+        local listButtons = {}
+
+        local function SelectGroup(index)
+            selectedItem = index
+            for i, btn in ipairs(listButtons) do
+                if i == index then
+                    btn.bg:SetColorTexture(0.15, 0.35, 0.6, 0.6)
+                    btn.text:SetTextColor(1, 0.82, 0)
+                else
+                    btn.bg:SetColorTexture(0, 0, 0, 0)
+                    btn.text:SetTextColor(0.8, 0.8, 0.8)
+                end
+            end
+            ClearChildren(detailContent)
+            local child = childGroups[index]
+            if child and child.args then
+                local dw = detailContent:GetWidth() - PAD
+                if dw <= 0 then dw = 360 end
+                local bottomY = RenderWidgets(detailContent, child.args, dw)
+                detailContent:SetHeight(math.abs(bottomY) + PAD)
+            end
+        end
+
+        -- Build list items
+        local listY = 0
+        for i, child in ipairs(childGroups) do
+            local itemBtn = CreateFrame("Button", nil, listContent)
+            itemBtn:SetSize(LIST_WIDTH - 26, LIST_ITEM_HEIGHT)
+            itemBtn:SetPoint("TOPLEFT", 0, -listY)
+
+            local bg = itemBtn:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(0, 0, 0, 0)
+            itemBtn.bg = bg
+
+            local text = itemBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            text:SetPoint("LEFT", 8, 0)
+            text:SetText(child.name or ("Item " .. i))
+            text:SetTextColor(0.8, 0.8, 0.8)
+            itemBtn.text = text
+
+            itemBtn:SetScript("OnClick", function() SelectGroup(i) end)
+            itemBtn:SetScript("OnEnter", function(self)
+                if selectedItem ~= i then self.bg:SetColorTexture(0.1, 0.2, 0.4, 0.3) end
+            end)
+            itemBtn:SetScript("OnLeave", function(self)
+                if selectedItem ~= i then self.bg:SetColorTexture(0, 0, 0, 0) end
+            end)
+
+            listButtons[#listButtons + 1] = itemBtn
+            listY = listY + LIST_ITEM_HEIGHT
+        end
+        listContent:SetHeight(listY)
+
+        -- Auto-select first
+        if #childGroups > 0 then
+            C_Timer.After(0, function()
+                detailContent:SetWidth(detailFrame:GetWidth() - 28)
+                SelectGroup(1)
+            end)
+        end
+
+        detailFrame:SetScript("OnSizeChanged", function(self, w)
+            detailContent:SetWidth(w - 28)
+            if selectedItem then SelectGroup(selectedItem) end
+        end)
+
+        -- Split frame fills to bottom, no need to adjust yOffset further
+    end
+
+    -- If no two-panel groups, render any remaining groups flat
+    if #groupArgs == 0 then
+        for _, opt in ipairs(sorted) do
+            if opt.type == "group" and opt.args then
+                local hdr, hh = CreateHeaderWidget(container, opt, contentWidth - PAD * 2)
+                hdr:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+                hdr:Show()
+                yOffset = yOffset - hh - SPACING
+                local innerSorted = SortedArgs(opt.args)
+                for _, innerOpt in ipairs(innerSorted) do
+                    local factory = widgetFactories[innerOpt.type]
+                    if factory then
+                        local widget, h = factory(container, innerOpt, contentWidth - PAD * 2)
+                        widget:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+                        widget:Show()
+                        yOffset = yOffset - h - SPACING
+                    end
+                end
+            end
+        end
+    end
+
+    container:SetHeight(math.abs(yOffset) + PAD)
+end
+
+---------------------------------------------------------------------------
+-- ScrollFrame Canvas
 ---------------------------------------------------------------------------
 
 local function CreateScrollCanvas(name)
@@ -385,10 +650,7 @@ local function CreateScrollCanvas(name)
     container.scroll = scroll
     container.content = content
 
-    -- Update content width when container resizes
-    container:SetScript("OnSizeChanged", function(self, w, h)
-        scroll:SetPoint("TOPLEFT", 4, -4)
-        scroll:SetPoint("BOTTOMRIGHT", -24, 4)
+    container:SetScript("OnSizeChanged", function(self, w)
         content:SetWidth(w - 32)
     end)
 
@@ -396,22 +658,53 @@ local function CreateScrollCanvas(name)
 end
 
 local function RenderIntoCanvas(container, optionsTable)
+    -- Clear both the scroll content and any direct children on the container
     local content = container.content
     ClearChildren(content)
 
-    local contentWidth = content:GetWidth() - (PAD * 2)
+    -- Also clear any previous split frames attached directly to container
+    if container.splitFrame then
+        container.splitFrame:Hide()
+        container.splitFrame:SetParent(nil)
+        container.splitFrame = nil
+    end
+    if container.topFrame then
+        container.topFrame:Hide()
+        container.topFrame:SetParent(nil)
+        container.topFrame = nil
+    end
+
+    local contentWidth = container:GetWidth() - 8
     if contentWidth <= 0 then contentWidth = 560 end
 
-    local yOffset = -PAD
+    -- Check if we have a two-panel group
     local args = optionsTable.args or {}
+    local hasTwoPanel = false
+    for _, opt in pairs(args) do
+        if opt.type == "group" and HasChildGroups(opt.args) then
+            hasTwoPanel = true
+            break
+        end
+    end
 
-    yOffset = RenderGroup(content, args, contentWidth, yOffset, 0)
-
-    content:SetHeight(math.abs(yOffset) + PAD)
+    if hasTwoPanel then
+        -- Hide the scroll frame — we render directly on the container
+        container.scroll:Hide()
+        CreateTwoPanelLayout(container, optionsTable)
+    else
+        -- Simple layout — use the scroll frame
+        container.scroll:Show()
+        local cw = content:GetWidth()
+        if cw <= 0 then cw = 560 end
+        CreateTwoPanelLayout(content, optionsTable)
+    end
 end
 
+-- Expose for cross-module access (Profiles.lua needs to force re-render)
+BazCore._RenderIntoCanvas = RenderIntoCanvas
+
 ---------------------------------------------------------------------------
--- Standalone Options Window
+-- Standalone Window
 ---------------------------------------------------------------------------
 
 local standaloneWindow = nil
@@ -420,7 +713,7 @@ local function EnsureStandaloneWindow()
     if standaloneWindow then return standaloneWindow end
 
     local f = CreateFrame("Frame", "BazCoreOptionsWindow", UIParent, "BackdropTemplate")
-    f:SetSize(680, 520)
+    f:SetSize(720, 560)
     f:SetPoint("CENTER")
     f:SetFrameStrata("HIGH")
     f:SetMovable(true)
@@ -435,18 +728,15 @@ local function EnsureStandaloneWindow()
     f:SetBackdropBorderColor(0.2, 0.6, 1.0, 0.8)
     f:Hide()
 
-    -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -12)
     title:SetText("Options")
     title:SetTextColor(0.2, 0.6, 1.0)
     f.title = title
 
-    -- Close button
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", -4, -4)
 
-    -- Content area
     local canvas = CreateScrollCanvas(nil)
     canvas:SetParent(f)
     canvas:SetPoint("TOPLEFT", 8, -36)
@@ -454,9 +744,7 @@ local function EnsureStandaloneWindow()
     canvas:Show()
     f.canvas = canvas
 
-    -- Escape to close
     tinsert(UISpecialFrames, "BazCoreOptionsWindow")
-
     standaloneWindow = f
     return f
 end
@@ -473,16 +761,13 @@ end
 function BazCore:AddToSettings(addonName, displayName, parentName)
     local entry = optionsTables[addonName]
     if not entry or not entry.func then return end
-
     displayName = displayName or addonName
 
     local canvas = CreateScrollCanvas("BazCoreOptions_" .. addonName)
-
     local category
     if parentName and optionsTables[parentName] and optionsTables[parentName].category then
         category = Settings.RegisterCanvasLayoutSubcategory(
-            optionsTables[parentName].category, canvas, displayName
-        )
+            optionsTables[parentName].category, canvas, displayName)
     else
         category = Settings.RegisterCanvasLayoutCategory(canvas, displayName)
         Settings.RegisterAddOnCategory(category)
@@ -491,38 +776,24 @@ function BazCore:AddToSettings(addonName, displayName, parentName)
     entry.category = category
     entry.canvas = canvas
 
-    -- Render on first show
     canvas:SetScript("OnShow", function(self)
         local tbl = entry.func
         if type(tbl) == "function" then tbl = tbl() end
-        if tbl then
-            RenderIntoCanvas(self, tbl)
-        end
-        self:SetScript("OnShow", function(s)
-            -- Re-render each time panel is shown (dynamic content)
-            local t = entry.func
-            if type(t) == "function" then t = t() end
-            if t then RenderIntoCanvas(s, t) end
-        end)
+        if tbl then RenderIntoCanvas(self, tbl) end
     end)
 end
 
 function BazCore:OpenOptionsPanel(addonName)
     local entry = optionsTables[addonName]
     if not entry or not entry.func then return end
-
-    -- Try opening in Blizzard Settings first
     if entry.category then
         Settings.OpenToCategory(entry.category:GetID())
         return
     end
-
-    -- Fallback: standalone window
     local win = EnsureStandaloneWindow()
     local tbl = entry.func
     if type(tbl) == "function" then tbl = tbl() end
     if not tbl then return end
-
     win.title:SetText(tbl.name or addonName)
     RenderIntoCanvas(win.canvas, tbl)
     win:Show()
@@ -531,22 +802,14 @@ end
 function BazCore:RefreshOptions(addonName)
     local entry = optionsTables[addonName]
     if not entry then return end
-
-    -- Re-render canvas if it exists and is shown
-    if entry.canvas and entry.canvas:IsShown() then
+    if entry.canvas then
         local tbl = entry.func
         if type(tbl) == "function" then tbl = tbl() end
-        if tbl then
-            RenderIntoCanvas(entry.canvas, tbl)
-        end
+        if tbl then RenderIntoCanvas(entry.canvas, tbl) end
     end
-
-    -- Re-render standalone window if showing this addon
     if standaloneWindow and standaloneWindow:IsShown() then
         local tbl = entry.func
         if type(tbl) == "function" then tbl = tbl() end
-        if tbl then
-            RenderIntoCanvas(standaloneWindow.canvas, tbl)
-        end
+        if tbl then RenderIntoCanvas(standaloneWindow.canvas, tbl) end
     end
 end

@@ -3,7 +3,7 @@
 -- Single shared minimap button for all Baz addons
 ---------------------------------------------------------------------------
 
-local BUTTON_SIZE = 32
+local BUTTON_SIZE = 31
 local BUTTON_RADIUS_OFFSET = 10  -- extra pixels beyond minimap edge
 local DEFAULT_ANGLE = 225
 
@@ -72,14 +72,14 @@ local function CreateButton()
 
     -- Background circle
     local bg = btn:CreateTexture(nil, "BACKGROUND")
-    bg:SetSize(BUTTON_SIZE, BUTTON_SIZE)
+    bg:SetSize(24, 24)
     bg:SetPoint("CENTER")
     bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
     bg:SetVertexColor(0.1, 0.1, 0.15, 0.8)
 
     -- Icon
     local icon = btn:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(20, 20)
+    icon:SetSize(18, 18)
     icon:SetPoint("CENTER")
     icon:SetTexture("Interface\\Icons\\INV_Gizmo_GoblingTonkController")
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- trim default icon border
@@ -87,8 +87,8 @@ local function CreateButton()
 
     -- Border ring
     local border = btn:CreateTexture(nil, "OVERLAY")
-    border:SetSize(BUTTON_SIZE + 2, BUTTON_SIZE + 2)
-    border:SetPoint("CENTER")
+    border:SetSize(50, 50)
+    border:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
     border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
 
     -- Highlight

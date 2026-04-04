@@ -377,166 +377,193 @@ function BazCore:GetProfileOptionsTable(addonName)
     local config = self.addons[addonName]
     if not config then return nil end
 
+    local displayName = config.title or addonName
+
+    -- Force re-render the profiles panel
+    local function RefreshProfilesPanel()
+        local profileEntry = BazCore._optionsTables and BazCore._optionsTables[addonName .. "-Profiles"]
+        if profileEntry and profileEntry.canvas and BazCore._RenderIntoCanvas then
+            local tbl = profileEntry.func
+            if type(tbl) == "function" then tbl = tbl() end
+            if tbl then BazCore._RenderIntoCanvas(profileEntry.canvas, tbl) end
+        end
+    end
+
+    -- Build a per-profile child group for each profile
+    local function BuildProfileArgs()
+        local profileList = BazCore:ListProfiles(addonName)
+        local profileGroups = {}
+
+        for i, profileName in ipairs(profileList) do
+            local isActive = (profileName == BazCore:GetActiveProfile(addonName))
+            local isDefault = (profileName == DEFAULT_PROFILE)
+
+            profileGroups["profile_" .. i] = {
+                order = i,
+                type = "group",
+                name = profileName .. (isActive and " |cff00ff00(active)|r" or ""),
+                args = {
+                    statusHeader = {
+                        order = 1,
+                        type = "header",
+                        name = "Profile: " .. profileName,
+                    },
+                    activate = {
+                        order = 2,
+                        type = "execute",
+                        name = isActive and "|cff00ff00Active Profile|r" or "Switch to This Profile",
+                        desc = isActive and "This is the current profile" or "Activate this profile",
+                        func = function()
+                            if not isActive then
+                                BazCore:SetActiveProfile(addonName, profileName)
+                                BazCore:Print("Switched to profile: " .. profileName)
+                                RefreshProfilesPanel()
+                            end
+                        end,
+                    },
+                    copyHeader = {
+                        order = 10,
+                        type = "header",
+                        name = "Actions",
+                    },
+                    copyFrom = {
+                        order = 11,
+                        type = "select",
+                        name = "Copy Settings From",
+                        desc = "Overwrite this profile with settings from another",
+                        values = function()
+                            local vals = {}
+                            for _, name in ipairs(BazCore:ListProfiles(addonName)) do
+                                if name ~= profileName then
+                                    vals[name] = name
+                                end
+                            end
+                            return vals
+                        end,
+                        get = function() return "" end,
+                        set = function(_, val)
+                            if BazCore:CopyProfile(addonName, val, profileName) then
+                                BazCore:Print("Copied '" .. val .. "' into '" .. profileName .. "'")
+                                if isActive then
+                                    BazCore:FireProfileChanged(addonName, profileName, profileName)
+                                end
+                            end
+                        end,
+                    },
+                    resetProfile = {
+                        order = 12,
+                        type = "execute",
+                        name = "Reset to Defaults",
+                        desc = "Reset this profile to default settings",
+                        confirm = true,
+                        confirmText = "Reset '" .. profileName .. "' to defaults?",
+                        func = function()
+                            BazCore:ResetProfile(addonName, profileName)
+                            BazCore:Print("'" .. profileName .. "' reset to defaults.")
+                        end,
+                    },
+                    deleteProfile = {
+                        order = 20,
+                        type = "execute",
+                        name = "|cffff4444Delete This Profile|r",
+                        desc = isDefault and "Cannot delete Default profile" or (isActive and "Cannot delete the active profile" or "Permanently delete this profile"),
+                        confirm = not (isDefault or isActive),
+                        confirmText = "Delete profile '" .. profileName .. "'? This cannot be undone.",
+                        func = function()
+                            if isDefault then
+                                BazCore:Print("Cannot delete the Default profile.")
+                            elseif isActive then
+                                BazCore:Print("Cannot delete the active profile. Switch first.")
+                            else
+                                BazCore:DeleteProfile(addonName, profileName)
+                                BazCore:Print("Deleted profile: " .. profileName)
+                                RefreshProfilesPanel()
+                            end
+                        end,
+                    },
+                    assignHeader = {
+                        order = 30,
+                        type = "header",
+                        name = "Auto-Assignment",
+                    },
+                    assignDesc = {
+                        order = 31,
+                        type = "description",
+                        name = "Automatically use this profile for:",
+                    },
+                    assignChar = {
+                        order = 32,
+                        type = "execute",
+                        name = "This Character",
+                        func = function()
+                            BazCore:AssignProfile(addonName, "character", profileName)
+                            BazCore:Print("'" .. profileName .. "' assigned to this character.")
+                        end,
+                    },
+                    assignClass = {
+                        order = 33,
+                        type = "execute",
+                        name = "This Class",
+                        func = function()
+                            BazCore:AssignProfile(addonName, "class", profileName)
+                            BazCore:Print("'" .. profileName .. "' assigned to this class.")
+                        end,
+                    },
+                    assignSpec = {
+                        order = 34,
+                        type = "execute",
+                        name = "This Spec",
+                        func = function()
+                            if BazCore:AssignProfile(addonName, "spec", profileName) then
+                                BazCore:Print("'" .. profileName .. "' assigned to this spec.")
+                            else
+                                BazCore:Print("Could not determine current spec.")
+                            end
+                        end,
+                    },
+                },
+            }
+        end
+
+        return profileGroups
+    end
+
     return {
         name = "Profiles",
+        subtitle = displayName .. " profile management",
         type = "group",
         args = {
-            desc = {
+            newProfile = {
                 order = 1,
-                type = "description",
-                name = "Manage profiles for " .. (config.title or addonName) .. ". Profiles store all settings and can be assigned per character, class, or specialization.\n",
-            },
-            currentProfile = {
-                order = 2,
-                type = "select",
-                name = "Active Profile",
-                desc = "Select which profile to use",
-                values = function()
-                    local vals = {}
-                    for _, name in ipairs(BazCore:ListProfiles(addonName)) do
-                        vals[name] = name
+                type = "execute",
+                name = "Create New Profile",
+                desc = "Create a new profile",
+                func = function()
+                    local profiles = BazCore:ListProfiles(addonName)
+                    local name = "New Profile"
+                    local num = 1
+                    local nameExists = true
+                    while nameExists do
+                        nameExists = false
+                        for _, p in ipairs(profiles) do
+                            if p == name then
+                                nameExists = true
+                                num = num + 1
+                                name = "New Profile " .. num
+                                break
+                            end
+                        end
                     end
-                    return vals
-                end,
-                get = function()
-                    return BazCore:GetActiveProfile(addonName)
-                end,
-                set = function(_, val)
-                    BazCore:SetActiveProfile(addonName, val)
+                    BazCore:CreateProfile(addonName, name)
+                    BazCore:Print("Created profile: " .. name)
+                    RefreshProfilesPanel()
                 end,
             },
-            spacer1 = { order = 3, type = "description", name = "\n" },
-            newHeader = {
+            profiles = {
                 order = 10,
-                type = "header",
-                name = "Create Profile",
-            },
-            newName = {
-                order = 11,
-                type = "input",
-                name = "New Profile Name",
-                desc = "Enter a name for the new profile",
-                get = function() return "" end,
-                set = function(_, val)
-                    if val and val ~= "" then
-                        if BazCore:CreateProfile(addonName, val) then
-                            BazCore:Print("Created profile: " .. val)
-                        end
-                    end
-                end,
-            },
-            copyHeader = {
-                order = 20,
-                type = "header",
-                name = "Copy / Delete",
-            },
-            copyFrom = {
-                order = 21,
-                type = "select",
-                name = "Copy From",
-                desc = "Select a profile to copy settings from into the active profile",
-                values = function()
-                    local vals = {}
-                    for _, name in ipairs(BazCore:ListProfiles(addonName)) do
-                        if name ~= BazCore:GetActiveProfile(addonName) then
-                            vals[name] = name
-                        end
-                    end
-                    return vals
-                end,
-                get = function() return "" end,
-                set = function(_, val)
-                    local active = BazCore:GetActiveProfile(addonName)
-                    if BazCore:CopyProfile(addonName, val, active) then
-                        BazCore:Print("Copied profile '" .. val .. "' into '" .. active .. "'")
-                        BazCore:FireProfileChanged(addonName, active, active)
-                    end
-                end,
-            },
-            deleteProfile = {
-                order = 22,
-                type = "select",
-                name = "Delete Profile",
-                desc = "Select a profile to delete (cannot delete active or Default)",
-                values = function()
-                    local vals = {}
-                    local active = BazCore:GetActiveProfile(addonName)
-                    for _, name in ipairs(BazCore:ListProfiles(addonName)) do
-                        if name ~= active and name ~= DEFAULT_PROFILE then
-                            vals[name] = name
-                        end
-                    end
-                    return vals
-                end,
-                get = function() return "" end,
-                set = function(_, val)
-                    if BazCore:DeleteProfile(addonName, val) then
-                        BazCore:Print("Deleted profile: " .. val)
-                    end
-                end,
-            },
-            resetHeader = {
-                order = 30,
-                type = "header",
-                name = "Reset",
-            },
-            resetProfile = {
-                order = 31,
-                type = "execute",
-                name = "Reset Active Profile",
-                desc = "Reset the current profile to default settings",
-                confirm = true,
-                confirmText = "Are you sure you want to reset the active profile to defaults?",
-                func = function()
-                    BazCore:ResetProfile(addonName)
-                    BazCore:Print("Profile reset to defaults")
-                end,
-            },
-            assignHeader = {
-                order = 40,
-                type = "header",
-                name = "Auto-Assignment",
-            },
-            assignDesc = {
-                order = 41,
-                type = "description",
-                name = "Assign profiles to automatically activate for specific characters, classes, or specs.\n",
-            },
-            assignChar = {
-                order = 42,
-                type = "execute",
-                name = "Assign to This Character",
-                desc = "Assign the active profile to this character",
-                func = function()
-                    local active = BazCore:GetActiveProfile(addonName)
-                    BazCore:AssignProfile(addonName, "character", active)
-                    BazCore:Print("Assigned '" .. active .. "' to this character")
-                end,
-            },
-            assignClass = {
-                order = 43,
-                type = "execute",
-                name = "Assign to This Class",
-                desc = "Assign the active profile to all characters of this class",
-                func = function()
-                    local active = BazCore:GetActiveProfile(addonName)
-                    BazCore:AssignProfile(addonName, "class", active)
-                    BazCore:Print("Assigned '" .. active .. "' to this class")
-                end,
-            },
-            assignSpec = {
-                order = 44,
-                type = "execute",
-                name = "Assign to This Spec",
-                desc = "Assign the active profile to this class and specialization",
-                func = function()
-                    local active = BazCore:GetActiveProfile(addonName)
-                    if BazCore:AssignProfile(addonName, "spec", active) then
-                        BazCore:Print("Assigned '" .. active .. "' to this spec")
-                    else
-                        BazCore:Print("Could not determine current spec")
-                    end
-                end,
+                type = "group",
+                name = "Profiles",
+                args = BuildProfileArgs(),
             },
         },
     }
