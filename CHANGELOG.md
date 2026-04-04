@@ -1,5 +1,10 @@
 # BazCore Changelog
 
+## 009
+- Settings panel: added Baz Suite version info display
+- Settings panel: added welcome message toggle
+- Settings panel: added per-addon memory usage with refresh button
+
 ## 008
 - Added `BazCore:SafeMatch()`, `BazCore:SafeFind()`, `BazCore:SafeString()` for Midnight secret string taint handling
 

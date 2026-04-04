@@ -125,10 +125,47 @@ BazCore:QueueForLogin(function()
     BazCoreDB = BazCoreDB or {}
     BazCoreDB.minimap = BazCoreDB.minimap or { hide = false }
 
+    BazCoreDB.welcomeMessage = BazCoreDB.welcomeMessage == nil and true or BazCoreDB.welcomeMessage
+
     BazCore:RegisterOptionsTable("BazCore", function()
+        -- Build version info string
+        local versionLines = {}
+        versionLines[#versionLines + 1] = "|cff3399ffBazCore|r v" .. BazCore.VERSION
+        local sorted = {}
+        for name, config in pairs(BazCore.addons) do
+            sorted[#sorted + 1] = { name = config.title or name, toc = config.savedVariable and name }
+        end
+        table.sort(sorted, function(a, b) return a.name < b.name end)
+        for _, info in ipairs(sorted) do
+            local ver = "?"
+            if info.toc then
+                ver = C_AddOns.GetAddOnMetadata(info.toc, "Version") or "?"
+            end
+            versionLines[#versionLines + 1] = "|cffffffff" .. info.name .. "|r v" .. ver
+        end
+
+        -- Build memory usage string
+        UpdateAddOnMemoryUsage()
+        local totalMem = 0
+        local memLines = {}
+        local memAddons = { "BazCore" }
+        for name in pairs(BazCore.addons) do
+            memAddons[#memAddons + 1] = name
+        end
+        table.sort(memAddons)
+        for _, name in ipairs(memAddons) do
+            local mem = GetAddOnMemoryUsage(name)
+            if mem and mem > 0 then
+                totalMem = totalMem + mem
+                local display = C_AddOns.GetAddOnMetadata(name, "Title") or name
+                memLines[#memLines + 1] = string.format("|cffffffff%s|r — %.0f KB", display, mem)
+            end
+        end
+        memLines[#memLines + 1] = string.format("|cff3399ffTotal|r — %.0f KB", totalMem)
+
         return {
             name = "BazCore",
-            subtitle = "Shared framework for Baz addons (v" .. BazCore.VERSION .. ")",
+            subtitle = "Shared framework for Baz addons",
             type = "group",
             args = {
                 minimapBtn = {
@@ -146,23 +183,45 @@ BazCore:QueueForLogin(function()
                         end
                     end,
                 },
-                registeredHeader = {
+                welcomeMsg = {
+                    order = 2,
+                    type = "toggle",
+                    name = "Show Welcome Messages",
+                    desc = "Show addon loaded messages in chat on login",
+                    get = function() return BazCoreDB.welcomeMessage end,
+                    set = function(_, val) BazCoreDB.welcomeMessage = val end,
+                },
+
+                versionHeader = {
                     order = 10,
                     type = "header",
-                    name = "Registered Addons",
+                    name = "Baz Suite Versions",
                 },
-                registeredList = {
+                versionList = {
                     order = 11,
                     type = "description",
-                    name = (function()
-                        local names = {}
-                        for n, config in pairs(BazCore.addons) do
-                            names[#names + 1] = (config.title or n)
+                    name = table.concat(versionLines, "\n"),
+                },
+
+                memHeader = {
+                    order = 20,
+                    type = "header",
+                    name = "Memory Usage",
+                },
+                memList = {
+                    order = 21,
+                    type = "description",
+                    name = table.concat(memLines, "\n"),
+                },
+                memRefresh = {
+                    order = 22,
+                    type = "execute",
+                    name = "Refresh Memory",
+                    func = function()
+                        if BazCore.RefreshOptions then
+                            BazCore:RefreshOptions("BazCore")
                         end
-                        table.sort(names)
-                        if #names == 0 then return "No addons registered yet." end
-                        return table.concat(names, ", ")
-                    end)(),
+                    end,
                 },
             },
         }
