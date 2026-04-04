@@ -29,9 +29,19 @@ function BazCore:RegisterCommands(addonName, config)
             return
         end
 
-        -- Built-in: help (or empty input)
-        if cmd == "" or cmd == "help" then
+        -- Built-in: help
+        if cmd == "help" then
             BazCore:PrintCommandHelp(addonName, config)
+            return
+        end
+
+        -- Empty input: default handler or open settings
+        if cmd == "" then
+            if config.defaultHandler then
+                config.defaultHandler()
+            else
+                BazCore:OpenSettings(addonName)
+            end
             return
         end
 
