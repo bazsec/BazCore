@@ -99,11 +99,7 @@ local function CreateButton()
         if mouseButton == "LeftButton" then
             ShowMenu()
         elseif mouseButton == "RightButton" then
-            -- Right-click: quick settings for the first addon, or BazCore settings
-            local firstName = next(minimapEntries)
-            if firstName then
-                BazCore:OpenOptionsPanel(firstName)
-            end
+            BazCore:OpenOptionsPanel("BazCore")
         end
     end)
     btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -112,11 +108,13 @@ local function CreateButton()
     btn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:SetText("Baz Addons", 0.2, 0.6, 1.0)
+        GameTooltip:AddLine("BazCore v" .. BazCore.VERSION, 0.8, 0.8, 0.8)
         for addonName, entry in pairs(minimapEntries) do
             GameTooltip:AddLine(entry.label or addonName, 0.8, 0.8, 0.8)
         end
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Left-click to open menu", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine("Right-click for BazCore settings", 0.5, 0.5, 0.5)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function()

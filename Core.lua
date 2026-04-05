@@ -6,7 +6,7 @@
 BazCore = BazCore or {}
 BazCore.addons = {}
 BazCore.addonObjects = {}
-BazCore.VERSION = "004"
+BazCore.VERSION = C_AddOns.GetAddOnMetadata("BazCore", "Version") or "?"
 
 ---------------------------------------------------------------------------
 -- Addon Object Prototype
