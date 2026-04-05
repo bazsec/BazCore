@@ -1,5 +1,10 @@
 # BazCore Changelog
 
+## 010
+- Version now reads from TOC dynamically (no more hardcoded version)
+- Minimap tooltip shows BazCore version
+- Right-click minimap button opens BazCore settings
+
 ## 009
 - Settings panel: added Baz Suite version info display
 - Settings panel: added welcome message toggle
