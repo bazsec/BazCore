@@ -164,17 +164,21 @@ end
 -- indexed or matched directly. These helpers convert to plain strings first.
 ---------------------------------------------------------------------------
 
-function BazCore:SafeMatch(str, pattern)
+function BazCore:SafeString(str)
     if not str then return nil end
-    return tostring(str):match(pattern)
+    local ok, result = pcall(string.format, "%s", str)
+    if ok then return result end
+    return nil
+end
+
+function BazCore:SafeMatch(str, pattern)
+    local s = self:SafeString(str)
+    if not s then return nil end
+    return s:match(pattern)
 end
 
 function BazCore:SafeFind(str, pattern, init, plain)
-    if not str then return nil end
-    return tostring(str):find(pattern, init, plain)
-end
-
-function BazCore:SafeString(str)
-    if not str then return "" end
-    return tostring(str)
+    local s = self:SafeString(str)
+    if not s then return nil end
+    return s:find(pattern, init, plain)
 end
