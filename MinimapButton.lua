@@ -152,6 +152,11 @@ local function CreateButton()
     BazCoreDB = BazCoreDB or {}
     local angle = BazCoreDB.minimapAngle or DEFAULT_ANGLE
     UpdateButtonPosition(angle)
+
+    -- Respect hide setting on load
+    if BazCoreDB.minimap and BazCoreDB.minimap.hide then
+        btn:Hide()
+    end
 end
 
 ---------------------------------------------------------------------------

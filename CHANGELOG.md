@@ -1,8 +1,12 @@
 # BazCore Changelog
 
-n## 011
+## 012
+- Minimap button now respects hide setting on login/reload
+
+## 011
 - SafeString now uses string.format to strip Midnight secret string taint
 - tostring() alone does not desecretize strings in Midnight
+
 ## 010
 - Version now reads from TOC dynamically (no more hardcoded version)
 - Minimap tooltip shows BazCore version
