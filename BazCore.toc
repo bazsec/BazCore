@@ -2,8 +2,9 @@
 ## Title: BazCore
 ## Notes: Shared framework for Baz addons
 ## Author: Baz4k
-## Version: 017
+## Version: 018
 ## X-License: GPL v2
+## Category: Baz Suite
 ## X-Curse-Project-ID: 1503896
 ## SavedVariables: BazCoreDB
 ## AddonCompartmentFunc: BazCore_Compartment_OnClick

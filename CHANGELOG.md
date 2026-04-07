@@ -1,5 +1,10 @@
 # BazCore Changelog
 
+## 018 - Audit Fixes
+- Auto-wired addon.db profile proxy via CreateDBProxy() in RegisterAddon
+- Addons no longer need manual profileProxy boilerplate
+- Category changed to "Baz Suite" for addon panel grouping
+
 ## 017
 - Two-column panel layout now works for flat options pages (no groups required)
 

@@ -397,6 +397,39 @@ function BazCore:FireProfileChanged(addonName, newProfile, oldProfile)
     BazCore:Fire("BAZ_PROFILE_CHANGED", addonName, newProfile, oldProfile)
 end
 
+---------------------------------------------------------------------------
+-- DB Proxy: addon.db.profile accessor (auto-wired by RegisterAddon)
+-- Provides addon.db.profile[key] that reads/writes the active profile
+---------------------------------------------------------------------------
+
+function BazCore:CreateDBProxy(addonName)
+    local config = self.addons[addonName]
+    if not config or not config.savedVariable then return nil end
+
+    local svName = config.savedVariable
+
+    local profileProxy = setmetatable({}, {
+        __index = function(_, key)
+            local sv = _G[svName]
+            if not sv then return nil end
+            local profileName = BazCore:GetActiveProfile(addonName)
+            local profile = sv.profiles and sv.profiles[profileName]
+            if profile then return profile[key] end
+            return nil
+        end,
+        __newindex = function(_, key, value)
+            local sv = _G[svName]
+            if not sv then return end
+            local profileName = BazCore:GetActiveProfile(addonName)
+            if not sv.profiles then sv.profiles = {} end
+            if not sv.profiles[profileName] then sv.profiles[profileName] = {} end
+            sv.profiles[profileName][key] = value
+        end,
+    })
+
+    return { profile = profileProxy }
+end
+
 -- AddonMixin method
 local AddonMixin = BazCore.AddonMixin
 

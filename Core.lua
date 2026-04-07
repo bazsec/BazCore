@@ -76,6 +76,11 @@ function BazCore:RegisterAddon(name, config)
                     if sv[k] == nil then sv[k] = v end
                 end
             end
+
+            -- Auto-wire addon.db.profile proxy for profile-enabled addons
+            if config.profiles and BazCore.CreateDBProxy then
+                addon.db = BazCore:CreateDBProxy(name)
+            end
         end
 
         -- onLoad callback (SV ready, before UI)
