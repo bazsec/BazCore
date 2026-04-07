@@ -503,8 +503,23 @@ local function CreateTwoPanelLayout(container, optionsTable)
 
     yOffset = yOffset - 40
 
-    -- Top-level widgets
+    -- Check if topArgs has any groups
+    local hasTopGroups = false
     for _, opt in ipairs(topArgs) do
+        if opt.type == "group" then hasTopGroups = true; break end
+    end
+
+    -- If all flat (no groups), use RenderWidgets for two-column layout
+    if not hasTopGroups and #topArgs > 0 then
+        local flatArgs = {}
+        for _, opt in ipairs(topArgs) do
+            flatArgs[opt._key] = opt
+        end
+        yOffset = RenderWidgets(container, flatArgs, contentWidth - PAD * 2, nil, yOffset)
+    end
+
+    -- Top-level widgets (when groups are present)
+    if hasTopGroups then for _, opt in ipairs(topArgs) do
         if opt.type == "group" and opt.inline then
             -- Inline group: bordered panel with header and children
             local panelPad = 10
@@ -578,7 +593,7 @@ local function CreateTwoPanelLayout(container, optionsTable)
                 yOffset = yOffset - h - SPACING
             end
         end
-    end
+    end end -- close hasTopGroups if + for
 
     -- Two-panel groups
     for _, groupOpt in ipairs(groupArgs) do

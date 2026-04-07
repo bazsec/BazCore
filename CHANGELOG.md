@@ -1,5 +1,8 @@
 # BazCore Changelog
 
+## 017
+- Two-column panel layout now works for flat options pages (no groups required)
+
 ## 016 - Options Panel Overhaul
 - Two-column bordered panel layout for settings (auto when panel > 500px wide)
 - Modern MinimalScrollBar replaces old UIPanelScrollFrameTemplate scroll bars
