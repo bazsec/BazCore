@@ -1,7 +1,11 @@
 # BazCore Changelog
 
-## 015
-- Minimap button menu respects per-addon onClick handler (falls back to options panel)
+## 016 - Options Panel Overhaul
+- Two-column bordered panel layout for settings (auto when panel > 500px wide)
+- Modern MinimalScrollBar replaces old UIPanelScrollFrameTemplate scroll bars
+- Headers use gold/yellow text for visual consistency
+- Groups can set `columns = 1` to force single column
+- Minimap button menu respects per-addon onClick handler
 
 ## 014 - Two-Column Options Panel
 - Options panel now auto-uses two-column layout when wide enough (>500px)

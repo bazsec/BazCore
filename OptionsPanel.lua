@@ -253,7 +253,14 @@ end
 -- Render flat widgets (non-group args) into a parent frame
 ---------------------------------------------------------------------------
 
-local COL_GAP = 16
+local COL_GAP = 12
+local PANEL_PAD = 10
+local PANEL_BACKDROP = {
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    edgeSize = 8,
+    insets = { left = 2, right = 2, top = 2, bottom = 2 },
+}
 
 local function RenderWidgets(parent, args, contentWidth, forceColumns, startY)
     local sorted = SortedArgs(args)
@@ -261,48 +268,11 @@ local function RenderWidgets(parent, args, contentWidth, forceColumns, startY)
 
     -- Two-column mode: auto when wide enough, unless forced to 1
     local useTwoCol = (forceColumns ~= 1) and (contentWidth > 500)
-    local colWidth = useTwoCol and math.floor((contentWidth - COL_GAP) / 2) or contentWidth
-    local col = 1       -- current column (1 or 2)
-    local rowMaxH = 0   -- tallest widget in current row
 
-    for _, opt in ipairs(sorted) do
-        if opt.type ~= "group" then
-            -- Full-width types: headers, descriptions, execute buttons
-            local fullWidth = (opt.type == "header" or opt.type == "description" or opt.type == "execute")
-
-            if fullWidth then
-                -- Finish any partial row
-                if col == 2 then
-                    yOffset = yOffset - rowMaxH - SPACING
-                    col = 1
-                    rowMaxH = 0
-                end
-                local factory = widgetFactories[opt.type]
-                if factory then
-                    local widget, h = factory(parent, opt, contentWidth)
-                    widget:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
-                    widget:Show()
-                    yOffset = yOffset - h - SPACING
-                end
-            elseif useTwoCol then
-                local factory = widgetFactories[opt.type]
-                if factory then
-                    local widget, h = factory(parent, opt, colWidth)
-                    local xOff = (col == 1) and PAD or (PAD + colWidth + COL_GAP)
-                    widget:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, yOffset)
-                    widget:Show()
-
-                    if h > rowMaxH then rowMaxH = h end
-
-                    if col == 1 then
-                        col = 2
-                    else
-                        yOffset = yOffset - rowMaxH - SPACING
-                        col = 1
-                        rowMaxH = 0
-                    end
-                end
-            else
+    if not useTwoCol then
+        -- Single column: simple linear layout
+        for _, opt in ipairs(sorted) do
+            if opt.type ~= "group" then
                 local factory = widgetFactories[opt.type]
                 if factory then
                     local widget, h = factory(parent, opt, contentWidth)
@@ -312,11 +282,126 @@ local function RenderWidgets(parent, args, contentWidth, forceColumns, startY)
                 end
             end
         end
+        return yOffset
     end
 
-    -- Finish any partial row
-    if col == 2 then
-        yOffset = yOffset - rowMaxH - SPACING
+    -- Two-column with bordered panels
+    -- First pass: separate into sections split by full-width items
+    local sections = {}
+    local currentLeft = {}
+    local currentRight = {}
+    local col = 1
+
+    for _, opt in ipairs(sorted) do
+        if opt.type ~= "group" then
+            local fullWidth = (opt.type == "header" or opt.type == "description" or opt.type == "execute")
+            if fullWidth then
+                if #currentLeft > 0 or #currentRight > 0 then
+                    table.insert(sections, { type = "pair", left = currentLeft, right = currentRight })
+                    currentLeft, currentRight = {}, {}
+                    col = 1
+                end
+                table.insert(sections, { type = "full", opt = opt })
+            else
+                if col == 1 then
+                    table.insert(currentLeft, opt)
+                    col = 2
+                else
+                    table.insert(currentRight, opt)
+                    col = 1
+                end
+            end
+        end
+    end
+    if #currentLeft > 0 or #currentRight > 0 then
+        table.insert(sections, { type = "pair", left = currentLeft, right = currentRight })
+    end
+
+    -- Second pass: render sections
+    local panelWidth = math.floor((contentWidth - COL_GAP) / 2)
+    local innerWidth = panelWidth - PANEL_PAD * 2
+    local prevType = nil
+
+    for _, section in ipairs(sections) do
+        if section.type == "full" then
+            -- Extra gap after a panel pair
+            if prevType == "pair" then
+                yOffset = yOffset - 4
+            end
+            local factory = widgetFactories[section.opt.type]
+            if factory then
+                local widget, h = factory(parent, section.opt, contentWidth)
+                widget:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
+                widget:Show()
+                yOffset = yOffset - h - 2
+            end
+        else
+            -- Calculate heights for each panel
+            local leftH = PANEL_PAD
+            for _, opt in ipairs(section.left) do
+                local factory = widgetFactories[opt.type]
+                if factory then
+                    local _, h = factory(parent, opt, innerWidth)
+                    leftH = leftH + h + SPACING
+                end
+            end
+            leftH = math.max(leftH + PANEL_PAD - SPACING, PANEL_PAD * 2)
+
+            local rightH = PANEL_PAD
+            for _, opt in ipairs(section.right) do
+                local factory = widgetFactories[opt.type]
+                if factory then
+                    local _, h = factory(parent, opt, innerWidth)
+                    rightH = rightH + h + SPACING
+                end
+            end
+            rightH = math.max(rightH + PANEL_PAD - SPACING, PANEL_PAD * 2)
+
+            local maxH = math.max(leftH, rightH)
+
+            -- Left panel
+            local leftPanel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+            leftPanel:SetSize(panelWidth, maxH)
+            leftPanel:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
+            leftPanel:SetBackdrop(PANEL_BACKDROP)
+            leftPanel:SetBackdropColor(0.04, 0.04, 0.06, 0.4)
+            leftPanel:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.5)
+            leftPanel:Show()
+
+            local ly = -PANEL_PAD
+            for _, opt in ipairs(section.left) do
+                local factory = widgetFactories[opt.type]
+                if factory then
+                    local widget, h = factory(leftPanel, opt, innerWidth)
+                    widget:SetPoint("TOPLEFT", leftPanel, "TOPLEFT", PANEL_PAD, ly)
+                    widget:Show()
+                    ly = ly - h - SPACING
+                end
+            end
+
+            -- Right panel
+            local rightPanel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+            rightPanel:SetSize(panelWidth, maxH)
+            rightPanel:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD + panelWidth + COL_GAP, yOffset)
+            rightPanel:SetBackdrop(PANEL_BACKDROP)
+            rightPanel:SetBackdropColor(0.04, 0.04, 0.06, 0.4)
+            rightPanel:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.5)
+            rightPanel:Show()
+
+            local ry = -PANEL_PAD
+            for _, opt in ipairs(section.right) do
+                local factory = widgetFactories[opt.type]
+                if factory then
+                    local widget, h = factory(rightPanel, opt, innerWidth)
+                    widget:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", PANEL_PAD, ry)
+                    widget:Show()
+                    ry = ry - h - SPACING
+                end
+            end
+
+            yOffset = yOffset - maxH - SPACING
+        end
+        prevType = section.type
     end
 
     return yOffset
@@ -538,13 +623,19 @@ local function CreateTwoPanelLayout(container, optionsTable)
             listTopY = listTopY - 26
         end
 
-        -- List scroll
-        local listScroll = CreateFrame("ScrollFrame", nil, listBg, "UIPanelScrollFrameTemplate")
+        -- List scroll (modern)
+        local listScroll = CreateFrame("ScrollFrame", nil, listBg)
         listScroll:SetPoint("TOPLEFT", 4, listTopY - 2)
-        listScroll:SetPoint("BOTTOMRIGHT", -20, 4)
+        listScroll:SetPoint("BOTTOMRIGHT", -14, 4)
+        listScroll:EnableMouseWheel(true)
+
+        local listScrollBar = CreateFrame("EventFrame", nil, listBg, "MinimalScrollBar")
+        listScrollBar:SetPoint("TOPLEFT", listScroll, "TOPRIGHT", 2, 0)
+        listScrollBar:SetPoint("BOTTOMLEFT", listScroll, "BOTTOMRIGHT", 2, 0)
+        ScrollUtil.InitScrollFrameWithScrollBar(listScroll, listScrollBar)
 
         local listContent = CreateFrame("Frame", nil, listScroll)
-        listContent:SetWidth(LIST_WIDTH - 26)
+        listContent:SetWidth(LIST_WIDTH - 22)
         listScroll:SetScrollChild(listContent)
 
         -- Right: detail panel
@@ -559,12 +650,18 @@ local function CreateTwoPanelLayout(container, optionsTable)
         detailFrame:SetBackdropColor(0.04, 0.04, 0.06, 0.4)
         detailFrame:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.5)
 
-        local detailScroll = CreateFrame("ScrollFrame", nil, detailFrame, "UIPanelScrollFrameTemplate")
+        local detailScroll = CreateFrame("ScrollFrame", nil, detailFrame)
         detailScroll:SetPoint("TOPLEFT", 4, -4)
-        detailScroll:SetPoint("BOTTOMRIGHT", -20, 4)
+        detailScroll:SetPoint("BOTTOMRIGHT", -14, 4)
+        detailScroll:EnableMouseWheel(true)
+
+        local detailScrollBar = CreateFrame("EventFrame", nil, detailFrame, "MinimalScrollBar")
+        detailScrollBar:SetPoint("TOPLEFT", detailScroll, "TOPRIGHT", 2, 0)
+        detailScrollBar:SetPoint("BOTTOMLEFT", detailScroll, "BOTTOMRIGHT", 2, 0)
+        ScrollUtil.InitScrollFrameWithScrollBar(detailScroll, detailScrollBar)
 
         local detailContent = CreateFrame("Frame", nil, detailScroll)
-        detailContent:SetWidth(detailFrame:GetWidth() - 28)
+        detailContent:SetWidth(detailFrame:GetWidth() - 22)
         detailScroll:SetScrollChild(detailContent)
 
         -- Gather child groups
@@ -671,19 +768,28 @@ local function CreateScrollCanvas(name)
     local container = CreateFrame("Frame", name, UIParent)
     container:Hide()
 
-    local scroll = CreateFrame("ScrollFrame", nil, container, "UIPanelScrollFrameTemplate")
+    -- Modern scroll: plain ScrollFrame + MinimalScrollBar
+    local scroll = CreateFrame("ScrollFrame", nil, container)
     scroll:SetPoint("TOPLEFT", 4, -4)
-    scroll:SetPoint("BOTTOMRIGHT", -24, 4)
+    scroll:SetPoint("BOTTOMRIGHT", -14, 4)
+    scroll:EnableMouseWheel(true)
+
+    local scrollBar = CreateFrame("EventFrame", nil, container, "MinimalScrollBar")
+    scrollBar:SetPoint("TOPLEFT", scroll, "TOPRIGHT", 4, 0)
+    scrollBar:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", 4, 0)
+
+    ScrollUtil.InitScrollFrameWithScrollBar(scroll, scrollBar)
 
     local content = CreateFrame("Frame", nil, scroll)
     content:SetWidth(scroll:GetWidth() or 600)
     scroll:SetScrollChild(content)
 
     container.scroll = scroll
+    container.scrollBar = scrollBar
     container.content = content
 
     container:SetScript("OnSizeChanged", function(self, w)
-        content:SetWidth(w - 32)
+        content:SetWidth(w - 22)
     end)
 
     return container
