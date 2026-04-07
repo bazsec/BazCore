@@ -253,20 +253,70 @@ end
 -- Render flat widgets (non-group args) into a parent frame
 ---------------------------------------------------------------------------
 
-local function RenderWidgets(parent, args, contentWidth)
+local COL_GAP = 16
+
+local function RenderWidgets(parent, args, contentWidth, forceColumns, startY)
     local sorted = SortedArgs(args)
-    local yOffset = -PAD
+    local yOffset = startY or -PAD
+
+    -- Two-column mode: auto when wide enough, unless forced to 1
+    local useTwoCol = (forceColumns ~= 1) and (contentWidth > 500)
+    local colWidth = useTwoCol and math.floor((contentWidth - COL_GAP) / 2) or contentWidth
+    local col = 1       -- current column (1 or 2)
+    local rowMaxH = 0   -- tallest widget in current row
 
     for _, opt in ipairs(sorted) do
         if opt.type ~= "group" then
-            local factory = widgetFactories[opt.type]
-            if factory then
-                local widget, h = factory(parent, opt, contentWidth)
-                widget:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
-                widget:Show()
-                yOffset = yOffset - h - SPACING
+            -- Full-width types: headers, descriptions, execute buttons
+            local fullWidth = (opt.type == "header" or opt.type == "description" or opt.type == "execute")
+
+            if fullWidth then
+                -- Finish any partial row
+                if col == 2 then
+                    yOffset = yOffset - rowMaxH - SPACING
+                    col = 1
+                    rowMaxH = 0
+                end
+                local factory = widgetFactories[opt.type]
+                if factory then
+                    local widget, h = factory(parent, opt, contentWidth)
+                    widget:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
+                    widget:Show()
+                    yOffset = yOffset - h - SPACING
+                end
+            elseif useTwoCol then
+                local factory = widgetFactories[opt.type]
+                if factory then
+                    local widget, h = factory(parent, opt, colWidth)
+                    local xOff = (col == 1) and PAD or (PAD + colWidth + COL_GAP)
+                    widget:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, yOffset)
+                    widget:Show()
+
+                    if h > rowMaxH then rowMaxH = h end
+
+                    if col == 1 then
+                        col = 2
+                    else
+                        yOffset = yOffset - rowMaxH - SPACING
+                        col = 1
+                        rowMaxH = 0
+                    end
+                end
+            else
+                local factory = widgetFactories[opt.type]
+                if factory then
+                    local widget, h = factory(parent, opt, contentWidth)
+                    widget:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
+                    widget:Show()
+                    yOffset = yOffset - h - SPACING
+                end
             end
         end
+    end
+
+    -- Finish any partial row
+    if col == 2 then
+        yOffset = yOffset - rowMaxH - SPACING
     end
 
     return yOffset
@@ -426,22 +476,13 @@ local function CreateTwoPanelLayout(container, optionsTable)
 
             yOffset = yOffset - childHeight - SPACING
         elseif opt.type == "group" then
-            -- Non-inline group: header + flat children
+            -- Non-inline group: header + flat children (two-column aware)
             local hdr, hh = CreateHeaderWidget(container, opt, contentWidth - PAD * 2)
             hdr:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
             hdr:Show()
             yOffset = yOffset - hh - SPACING
             if opt.args then
-                local innerSorted = SortedArgs(opt.args)
-                for _, innerOpt in ipairs(innerSorted) do
-                    local factory = widgetFactories[innerOpt.type]
-                    if factory then
-                        local widget, h = factory(container, innerOpt, contentWidth - PAD * 2)
-                        widget:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
-                        widget:Show()
-                        yOffset = yOffset - h - SPACING
-                    end
-                end
+                yOffset = RenderWidgets(container, opt.args, contentWidth - PAD * 2, opt.columns, yOffset)
             end
         else
             local factory = widgetFactories[opt.type]
@@ -606,7 +647,7 @@ local function CreateTwoPanelLayout(container, optionsTable)
         -- Split frame fills to bottom, no need to adjust yOffset further
     end
 
-    -- If no two-panel groups, render any remaining groups flat
+    -- If no two-panel groups, render any remaining groups flat (two-column aware)
     if #groupArgs == 0 then
         for _, opt in ipairs(sorted) do
             if opt.type == "group" and opt.args then
@@ -614,16 +655,7 @@ local function CreateTwoPanelLayout(container, optionsTable)
                 hdr:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
                 hdr:Show()
                 yOffset = yOffset - hh - SPACING
-                local innerSorted = SortedArgs(opt.args)
-                for _, innerOpt in ipairs(innerSorted) do
-                    local factory = widgetFactories[innerOpt.type]
-                    if factory then
-                        local widget, h = factory(container, innerOpt, contentWidth - PAD * 2)
-                        widget:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
-                        widget:Show()
-                        yOffset = yOffset - h - SPACING
-                    end
-                end
+                yOffset = RenderWidgets(container, opt.args, contentWidth - PAD * 2, opt.columns, yOffset)
             end
         end
     end

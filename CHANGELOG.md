@@ -1,5 +1,12 @@
 # BazCore Changelog
 
+## 014 - Two-Column Options Panel
+- Options panel now auto-uses two-column layout when wide enough (>500px)
+- Headers and descriptions span full width across both columns
+- Toggles, sliders, inputs, and selects flow into two columns
+- Groups can override with `columns = 1` to force single column
+- Reduces scrolling on settings pages with many options
+
 ## 013 - ObjectPool, DND, Notification Bridge
 - Added `BazCore:CreateObjectPool(createFunc, resetFunc)` — reusable object pool for UI recycling
 - Added `BazCore:IsDND()` — returns true if in combat or encounter active
