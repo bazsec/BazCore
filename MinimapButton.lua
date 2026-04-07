@@ -47,7 +47,11 @@ local function ShowMenu()
             local entry = item.entry
             local label = entry.label or item.name
             rootDescription:CreateButton(label, function()
-                BazCore:OpenOptionsPanel(item.name)
+                if entry.onClick then
+                    entry.onClick()
+                else
+                    BazCore:OpenOptionsPanel(item.name)
+                end
             end)
         end
     end)

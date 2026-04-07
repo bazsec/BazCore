@@ -1,5 +1,8 @@
 # BazCore Changelog
 
+## 015
+- Minimap button menu respects per-addon onClick handler (falls back to options panel)
+
 ## 014 - Two-Column Options Panel
 - Options panel now auto-uses two-column layout when wide enough (>500px)
 - Headers and descriptions span full width across both columns
