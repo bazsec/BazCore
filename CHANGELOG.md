@@ -1,5 +1,10 @@
 # BazCore Changelog
 
+## 013 - ObjectPool, DND, Notification Bridge
+- Added `BazCore:CreateObjectPool(createFunc, resetFunc)` — reusable object pool for UI recycling
+- Added `BazCore:IsDND()` — returns true if in combat or encounter active
+- Added `BazCore:PushNotification(data)` — routes to BazNotificationCenter if installed
+
 ## 012
 - Minimap button now respects hide setting on login/reload
 

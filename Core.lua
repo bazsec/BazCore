@@ -228,3 +228,32 @@ BazCore:QueueForLogin(function()
     end)
     BazCore:AddToSettings("BazCore", "BazCore")
 end)
+
+---------------------------------------------------------------------------
+-- Do Not Disturb: environmental state check
+-- Returns true if player is in combat or an encounter is active
+---------------------------------------------------------------------------
+
+local encounterActive = false
+
+local dndFrame = CreateFrame("Frame")
+dndFrame:RegisterEvent("ENCOUNTER_START")
+dndFrame:RegisterEvent("ENCOUNTER_END")
+dndFrame:SetScript("OnEvent", function(_, event)
+    encounterActive = (event == "ENCOUNTER_START")
+end)
+
+function BazCore:IsDND()
+    return InCombatLockdown() or encounterActive
+end
+
+---------------------------------------------------------------------------
+-- Notification Bridge
+-- Routes to BazNotificationCenter if installed, nil otherwise
+---------------------------------------------------------------------------
+
+function BazCore:PushNotification(data)
+    if BazNotificationCenter and BazNotificationCenter.Push then
+        return BazNotificationCenter:Push(data)
+    end
+end
