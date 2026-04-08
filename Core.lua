@@ -17,6 +17,14 @@ local AddonMixin = {}
 AddonMixin.__index = AddonMixin
 BazCore.AddonMixin = AddonMixin
 
+function AddonMixin:GetSetting(key)
+    if self.db and self.db.profile then return self.db.profile[key] end
+end
+
+function AddonMixin:SetSetting(key, value)
+    if self.db and self.db.profile then self.db.profile[key] = value end
+end
+
 ---------------------------------------------------------------------------
 -- Lifecycle: PLAYER_LOGIN queue
 ---------------------------------------------------------------------------
@@ -88,10 +96,6 @@ function BazCore:RegisterAddon(name, config)
             config.onLoad(addon)
         end
 
-        -- Build settings panel (Settings module)
-        if config.options and BazCore.BuildSettingsPanel then
-            BazCore:BuildSettingsPanel(name, config)
-        end
 
         -- Register slash commands (Commands module)
         if config.slash and BazCore.RegisterCommands then
