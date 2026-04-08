@@ -70,23 +70,31 @@ function BazCore:RegisterAddon(name, config)
 
     -- Deferred init on ADDON_LOADED
     EventUtil.ContinueOnAddOnLoaded(name, function()
-        -- Initialize saved variables
+        -- Initialize saved variables (for addons that still have their own SV, e.g. BNC history)
         if config.savedVariable then
             local svName = config.savedVariable
             _G[svName] = _G[svName] or {}
 
-            -- Profile init (if Profiles module loaded and profiles enabled)
-            if config.profiles and BazCore.InitProfiles then
-                BazCore:InitProfiles(name, config)
-            elseif config.defaults then
+            if not config.profiles and config.defaults then
                 local sv = _G[svName]
                 for k, v in pairs(config.defaults) do
                     if sv[k] == nil then sv[k] = v end
                 end
             end
+        end
 
-            -- Auto-wire addon.db.profile proxy for profile-enabled addons
-            if config.profiles and BazCore.CreateDBProxy then
+        -- Unified profile setup: addon data lives in BazCoreDB.profiles
+        if config.profiles and BazCore.InitAddonProfile then
+            -- Migrate old per-addon SV profiles into BazCoreDB (one-time)
+            if config.savedVariable and BazCore.MigrateAddonProfiles then
+                BazCore:MigrateAddonProfiles(name, config.savedVariable)
+            end
+
+            -- Ensure addon section exists with defaults in active profile
+            BazCore:InitAddonProfile(name, config)
+
+            -- Auto-wire addon.db.profile proxy
+            if BazCore.CreateDBProxy then
                 addon.db = BazCore:CreateDBProxy(name)
             end
         end
@@ -127,6 +135,14 @@ end
 ---------------------------------------------------------------------------
 -- BazCore's own settings page (registered after all modules load)
 ---------------------------------------------------------------------------
+
+-- Initialize unified profile structure early (before addons load)
+EventUtil.ContinueOnAddOnLoaded("BazCore", function()
+    BazCoreDB = BazCoreDB or {}
+    if BazCore.InitProfiles then
+        BazCore:InitProfiles()
+    end
+end)
 
 BazCore:QueueForLogin(function()
     if not BazCore.RegisterOptionsTable then return end
@@ -226,6 +242,14 @@ BazCore:QueueForLogin(function()
         }
     end)
     BazCore:AddToSettings("BazCore-Settings", "Settings", "BazCore")
+
+    -- Profiles subcategory (unified for all Baz Suite addons)
+    if BazCore.GetProfileOptionsTable then
+        BazCore:RegisterOptionsTable("BazCore-Profiles", function()
+            return BazCore:GetProfileOptionsTable()
+        end)
+        BazCore:AddToSettings("BazCore-Profiles", "Profiles", "BazCore")
+    end
 end)
 
 ---------------------------------------------------------------------------

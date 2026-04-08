@@ -1,6 +1,7 @@
 ---------------------------------------------------------------------------
 -- BazCore: Profiles Module
--- Named profile system with per-character/class/spec assignment
+-- Unified profile system — one profile controls all Baz Suite addons
+-- Profiles stored in BazCoreDB.profiles[profileName][addonName] = { ... }
 ---------------------------------------------------------------------------
 
 local DEFAULT_PROFILE = "Default"
@@ -32,15 +33,41 @@ local function GetSpecKey()
 end
 
 ---------------------------------------------------------------------------
--- Profile Initialization
--- Called from Core.lua during ADDON_LOADED when profiles = true
+-- Fill defaults for an addon section within a profile
 ---------------------------------------------------------------------------
 
-function BazCore:InitProfiles(addonName, config)
-    local svName = config.savedVariable
-    local sv = _G[svName]
+local function FillAddonDefaults(profileSection, defaults)
+    if not defaults then return end
+    for k, v in pairs(defaults) do
+        if profileSection[k] == nil then
+            if type(v) == "table" then
+                profileSection[k] = CopyTable(v)
+            else
+                profileSection[k] = v
+            end
+        end
+    end
+end
 
-    -- Ensure profile structure exists
+local function FillAllAddonDefaults(profile)
+    for addonName, config in pairs(BazCore.addons) do
+        if config.profiles and config.defaults then
+            if not profile[addonName] then
+                profile[addonName] = {}
+            end
+            FillAddonDefaults(profile[addonName], config.defaults)
+        end
+    end
+end
+
+---------------------------------------------------------------------------
+-- Profile Initialization
+-- Called once during BazCore's own ADDON_LOADED
+---------------------------------------------------------------------------
+
+function BazCore:InitProfiles()
+    local sv = BazCoreDB
+
     if not sv.profiles then
         sv.profiles = {}
     end
@@ -48,70 +75,84 @@ function BazCore:InitProfiles(addonName, config)
         sv.assignments = {}
     end
 
-    -- Create Default profile from defaults if it doesn't exist
+    -- Create Default profile if it doesn't exist
     if not sv.profiles[DEFAULT_PROFILE] then
         sv.profiles[DEFAULT_PROFILE] = {}
-        if config.defaults then
-            for k, v in pairs(config.defaults) do
-                if type(v) == "table" then
-                    sv.profiles[DEFAULT_PROFILE][k] = CopyTable(v)
-                else
-                    sv.profiles[DEFAULT_PROFILE][k] = v
-                end
-            end
-        end
     end
 
     -- Resolve which profile this character should use
-    sv.activeProfile = self:ResolveProfile(addonName) or DEFAULT_PROFILE
+    sv.activeProfile = self:ResolveProfile() or DEFAULT_PROFILE
 
     -- Ensure the resolved profile exists
     if not sv.profiles[sv.activeProfile] then
         sv.profiles[sv.activeProfile] = {}
-        if config.defaults then
-            for k, v in pairs(config.defaults) do
-                if type(v) == "table" then
-                    sv.profiles[sv.activeProfile][k] = CopyTable(v)
-                else
-                    sv.profiles[sv.activeProfile][k] = v
-                end
+    end
+end
+
+---------------------------------------------------------------------------
+-- Per-Addon Profile Setup
+-- Called from RegisterAddon when profiles = true
+-- Ensures the addon's section exists and has defaults filled
+---------------------------------------------------------------------------
+
+function BazCore:InitAddonProfile(addonName, config)
+    local sv = BazCoreDB
+    if not sv or not sv.profiles then return end
+
+    local profileName = sv.activeProfile or DEFAULT_PROFILE
+    local profile = sv.profiles[profileName]
+    if not profile then return end
+
+    -- Ensure addon section exists
+    if not profile[addonName] then
+        profile[addonName] = {}
+    end
+
+    -- Fill defaults
+    FillAddonDefaults(profile[addonName], config.defaults)
+end
+
+---------------------------------------------------------------------------
+-- Migration: Pull old per-addon SavedVariables into BazCoreDB
+---------------------------------------------------------------------------
+
+function BazCore:MigrateAddonProfiles(addonName, oldSVName)
+    local oldSV = _G[oldSVName]
+    if not oldSV or not oldSV.profiles then return end
+
+    local sv = BazCoreDB
+
+    -- Migrate each profile
+    for profileName, profileData in pairs(oldSV.profiles) do
+        if not sv.profiles[profileName] then
+            sv.profiles[profileName] = {}
+        end
+        -- Only migrate if this addon doesn't already have data in the unified profile
+        if not sv.profiles[profileName][addonName] then
+            sv.profiles[profileName][addonName] = profileData
+        end
+    end
+
+    -- Migrate assignments (first addon's assignments win for shared scopes)
+    if oldSV.assignments then
+        for scope, profileName in pairs(oldSV.assignments) do
+            if not sv.assignments[scope] then
+                sv.assignments[scope] = profileName
             end
         end
     end
 
-    -- Create proxy table that reads/writes to the active profile
-    -- Settings.lua uses this so the Settings API always hits the right profile
-    local proxy = setmetatable({}, {
-        __index = function(_, key)
-            local profile = sv.profiles[sv.activeProfile]
-            return profile and profile[key]
-        end,
-        __newindex = function(_, key, value)
-            local profile = sv.profiles[sv.activeProfile]
-            if profile then
-                profile[key] = value
-            end
-        end,
-        -- pairs() support for iteration
-        __pairs = function(_)
-            return next, sv.profiles[sv.activeProfile] or {}, nil
-        end,
-    })
-    config._settingsProxy = proxy
-
-    -- Fill in any missing defaults in the active profile
-    local activeProfile = sv.profiles[sv.activeProfile]
-    if config.defaults and activeProfile then
-        for k, v in pairs(config.defaults) do
-            if activeProfile[k] == nil then
-                if type(v) == "table" then
-                    activeProfile[k] = CopyTable(v)
-                else
-                    activeProfile[k] = v
-                end
-            end
+    -- Use the old active profile if we haven't set one yet
+    if sv.activeProfile == DEFAULT_PROFILE and oldSV.activeProfile and oldSV.activeProfile ~= DEFAULT_PROFILE then
+        if sv.profiles[oldSV.activeProfile] then
+            sv.activeProfile = oldSV.activeProfile
         end
     end
+
+    -- Clear old profile data from the addon's SV (keep non-profile data like history)
+    oldSV.profiles = nil
+    oldSV.assignments = nil
+    oldSV.activeProfile = nil
 end
 
 ---------------------------------------------------------------------------
@@ -119,10 +160,8 @@ end
 -- Determines which profile a character should use based on assignments
 ---------------------------------------------------------------------------
 
-function BazCore:ResolveProfile(addonName)
-    local config = self.addons[addonName]
-    if not config then return DEFAULT_PROFILE end
-    local sv = _G[config.savedVariable]
+function BazCore:ResolveProfile()
+    local sv = BazCoreDB
     if not sv or not sv.assignments then return DEFAULT_PROFILE end
 
     local assignments = sv.assignments
@@ -150,84 +189,59 @@ function BazCore:ResolveProfile(addonName)
 end
 
 ---------------------------------------------------------------------------
--- Profile Management API
+-- Profile Management API (unified — no addonName parameter)
 ---------------------------------------------------------------------------
 
-function BazCore:GetActiveProfile(addonName)
-    local config = self.addons[addonName]
-    if not config then return nil end
-    local sv = _G[config.savedVariable]
+function BazCore:GetActiveProfile()
+    local sv = BazCoreDB
     return sv and sv.activeProfile or DEFAULT_PROFILE
 end
 
-function BazCore:SetActiveProfile(addonName, profileName)
-    local config = self.addons[addonName]
-    if not config then return false end
-    local sv = _G[config.savedVariable]
+function BazCore:SetActiveProfile(profileName)
+    local sv = BazCoreDB
     if not sv or not sv.profiles[profileName] then return false end
 
     local oldProfile = sv.activeProfile
     sv.activeProfile = profileName
 
-    -- Fill defaults into newly activated profile
-    local profile = sv.profiles[profileName]
-    if config.defaults then
-        for k, v in pairs(config.defaults) do
-            if profile[k] == nil then
-                if type(v) == "table" then
-                    profile[k] = CopyTable(v)
-                else
-                    profile[k] = v
-                end
-            end
+    -- Fill defaults for all addons in the new profile
+    FillAllAddonDefaults(sv.profiles[profileName])
+
+    -- Fire callbacks for all addons
+    for addonName, config in pairs(BazCore.addons) do
+        if config.profiles then
+            self:FireProfileChanged(addonName, profileName, oldProfile)
         end
     end
-
-    -- Fire callbacks
-    self:FireProfileChanged(addonName, profileName, oldProfile)
     return true
 end
 
-function BazCore:CreateProfile(addonName, profileName)
-    local config = self.addons[addonName]
-    if not config then return false end
-    local sv = _G[config.savedVariable]
+function BazCore:CreateProfile(profileName)
+    local sv = BazCoreDB
     if not sv then return false end
 
     sv.profiles = sv.profiles or {}
-    if sv.profiles[profileName] then return false end -- already exists
+    if sv.profiles[profileName] then return false end
 
-    -- New profile starts with defaults
     sv.profiles[profileName] = {}
-    if config.defaults then
-        for k, v in pairs(config.defaults) do
-            if type(v) == "table" then
-                sv.profiles[profileName][k] = CopyTable(v)
-            else
-                sv.profiles[profileName][k] = v
-            end
-        end
-    end
+    FillAllAddonDefaults(sv.profiles[profileName])
 
-    BazCore:Fire("BAZ_PROFILE_CREATED", addonName, profileName)
+    BazCore:Fire("BAZ_PROFILE_CREATED", profileName)
     return true
 end
 
-function BazCore:CopyProfile(addonName, fromName, toName)
-    local config = self.addons[addonName]
-    if not config then return false end
-    local sv = _G[config.savedVariable]
+function BazCore:CopyProfile(fromName, toName)
+    local sv = BazCoreDB
     if not sv or not sv.profiles then return false end
 
     local source = sv.profiles[fromName]
     if not source then return false end
 
-    -- Create target if it doesn't exist
     if not sv.profiles[toName] then
         sv.profiles[toName] = {}
     end
 
-    -- Deep copy
+    -- Deep copy entire profile (all addon sections)
     wipe(sv.profiles[toName])
     for k, v in pairs(source) do
         if type(v) == "table" then
@@ -237,19 +251,15 @@ function BazCore:CopyProfile(addonName, fromName, toName)
         end
     end
 
-    BazCore:Fire("BAZ_PROFILE_COPIED", addonName, fromName, toName)
+    BazCore:Fire("BAZ_PROFILE_COPIED", fromName, toName)
     return true
 end
 
-function BazCore:DeleteProfile(addonName, profileName)
-    local config = self.addons[addonName]
-    if not config then return false end
-    local sv = _G[config.savedVariable]
+function BazCore:DeleteProfile(profileName)
+    local sv = BazCoreDB
     if not sv or not sv.profiles then return false end
 
-    -- Cannot delete the active profile
     if sv.activeProfile == profileName then return false end
-    -- Cannot delete Default
     if profileName == DEFAULT_PROFILE then return false end
 
     sv.profiles[profileName] = nil
@@ -263,53 +273,40 @@ function BazCore:DeleteProfile(addonName, profileName)
         end
     end
 
-    BazCore:Fire("BAZ_PROFILE_DELETED", addonName, profileName)
+    BazCore:Fire("BAZ_PROFILE_DELETED", profileName)
     return true
 end
 
-function BazCore:RenameProfile(addonName, oldName, newName)
-    local config = self.addons[addonName]
-    if not config then return false end
-    local sv = _G[config.savedVariable]
+function BazCore:RenameProfile(oldName, newName)
+    local sv = BazCoreDB
     if not sv or not sv.profiles then return false end
 
     if not oldName or not newName or oldName == "" or newName == "" then return false end
     if oldName == newName then return true end
-    if oldName == DEFAULT_PROFILE then return false end -- can't rename Default
-    if sv.profiles[newName] then return false end -- name already taken
+    if oldName == DEFAULT_PROFILE then return false end
+    if sv.profiles[newName] then return false end
 
-    -- Copy data to new key
     sv.profiles[newName] = sv.profiles[oldName]
     sv.profiles[oldName] = nil
 
-    -- Update active profile reference
     if sv.activeProfile == oldName then
         sv.activeProfile = newName
     end
 
-    -- Update assignments
     if sv.assignments then
-        for scope, tbl in pairs(sv.assignments) do
-            if type(tbl) == "table" then
-                for key, assignedProfile in pairs(tbl) do
-                    if assignedProfile == oldName then
-                        tbl[key] = newName
-                    end
-                end
-            elseif tbl == oldName then
+        for scope, assignedProfile in pairs(sv.assignments) do
+            if assignedProfile == oldName then
                 sv.assignments[scope] = newName
             end
         end
     end
 
-    BazCore:Fire("BAZ_PROFILE_RENAMED", addonName, oldName, newName)
+    BazCore:Fire("BAZ_PROFILE_RENAMED", oldName, newName)
     return true
 end
 
-function BazCore:ResetProfile(addonName, profileName)
-    local config = self.addons[addonName]
-    if not config then return false end
-    local sv = _G[config.savedVariable]
+function BazCore:ResetProfile(profileName)
+    local sv = BazCoreDB
     if not sv or not sv.profiles then return false end
 
     profileName = profileName or sv.activeProfile
@@ -317,28 +314,22 @@ function BazCore:ResetProfile(addonName, profileName)
     if not profile then return false end
 
     wipe(profile)
-    if config.defaults then
-        for k, v in pairs(config.defaults) do
-            if type(v) == "table" then
-                profile[k] = CopyTable(v)
-            else
-                profile[k] = v
+    FillAllAddonDefaults(profile)
+
+    if profileName == sv.activeProfile then
+        for addonName, config in pairs(BazCore.addons) do
+            if config.profiles then
+                self:FireProfileChanged(addonName, profileName, profileName)
             end
         end
     end
 
-    if profileName == sv.activeProfile then
-        self:FireProfileChanged(addonName, profileName, profileName)
-    end
-
-    BazCore:Fire("BAZ_PROFILE_RESET", addonName, profileName)
+    BazCore:Fire("BAZ_PROFILE_RESET", profileName)
     return true
 end
 
-function BazCore:ListProfiles(addonName)
-    local config = self.addons[addonName]
-    if not config then return {} end
-    local sv = _G[config.savedVariable]
+function BazCore:ListProfiles()
+    local sv = BazCoreDB
     if not sv or not sv.profiles then return {} end
 
     local list = {}
@@ -350,14 +341,11 @@ function BazCore:ListProfiles(addonName)
 end
 
 ---------------------------------------------------------------------------
--- Profile Assignment
+-- Profile Assignment (unified)
 ---------------------------------------------------------------------------
 
-function BazCore:AssignProfile(addonName, scope, profileName)
-    -- scope: "character", "class", "spec"
-    local config = self.addons[addonName]
-    if not config then return false end
-    local sv = _G[config.savedVariable]
+function BazCore:AssignProfile(scope, profileName)
+    local sv = BazCoreDB
     if not sv then return false end
 
     sv.assignments = sv.assignments or {}
@@ -377,7 +365,7 @@ function BazCore:AssignProfile(addonName, scope, profileName)
     if profileName then
         sv.assignments[scopeKey] = profileName
     else
-        sv.assignments[scopeKey] = nil -- clear assignment
+        sv.assignments[scopeKey] = nil
     end
 
     return true
@@ -398,32 +386,35 @@ function BazCore:FireProfileChanged(addonName, newProfile, oldProfile)
 end
 
 ---------------------------------------------------------------------------
--- DB Proxy: addon.db.profile accessor (auto-wired by RegisterAddon)
--- Provides addon.db.profile[key] that reads/writes the active profile
+-- DB Proxy: addon.db.profile accessor
+-- Reads/writes BazCoreDB.profiles[activeProfile][addonName][key]
 ---------------------------------------------------------------------------
 
 function BazCore:CreateDBProxy(addonName)
-    local config = self.addons[addonName]
-    if not config or not config.savedVariable then return nil end
-
-    local svName = config.savedVariable
-
     local profileProxy = setmetatable({}, {
         __index = function(_, key)
-            local sv = _G[svName]
-            if not sv then return nil end
-            local profileName = BazCore:GetActiveProfile(addonName)
-            local profile = sv.profiles and sv.profiles[profileName]
-            if profile then return profile[key] end
-            return nil
+            local sv = BazCoreDB
+            if not sv or not sv.profiles then return nil end
+            local profileName = sv.activeProfile or DEFAULT_PROFILE
+            local profile = sv.profiles[profileName]
+            if not profile or not profile[addonName] then return nil end
+            return profile[addonName][key]
         end,
         __newindex = function(_, key, value)
-            local sv = _G[svName]
+            local sv = BazCoreDB
             if not sv then return end
-            local profileName = BazCore:GetActiveProfile(addonName)
+            local profileName = sv.activeProfile or DEFAULT_PROFILE
             if not sv.profiles then sv.profiles = {} end
             if not sv.profiles[profileName] then sv.profiles[profileName] = {} end
-            sv.profiles[profileName][key] = value
+            if not sv.profiles[profileName][addonName] then sv.profiles[profileName][addonName] = {} end
+            sv.profiles[profileName][addonName][key] = value
+        end,
+        __pairs = function(_)
+            local sv = BazCoreDB
+            if not sv or not sv.profiles then return next, {}, nil end
+            local profileName = sv.activeProfile or DEFAULT_PROFILE
+            local section = sv.profiles[profileName] and sv.profiles[profileName][addonName]
+            return next, section or {}, nil
         end,
     })
 
@@ -442,18 +433,12 @@ end
 
 ---------------------------------------------------------------------------
 -- Auto-Generated Profile Options Table
--- Returns an AceConfig-style options table for OptionsPanel.lua
+-- Unified — one Profiles page in BazCore settings for all addons
 ---------------------------------------------------------------------------
 
-function BazCore:GetProfileOptionsTable(addonName)
-    local config = self.addons[addonName]
-    if not config then return nil end
-
-    local displayName = config.title or addonName
-
-    -- Force re-render the profiles panel
+function BazCore:GetProfileOptionsTable()
     local function RefreshProfilesPanel()
-        local profileEntry = BazCore._optionsTables and BazCore._optionsTables[addonName .. "-Profiles"]
+        local profileEntry = BazCore._optionsTables and BazCore._optionsTables["BazCore-Profiles"]
         if profileEntry and profileEntry.canvas and BazCore._RenderIntoCanvas then
             local tbl = profileEntry.func
             if type(tbl) == "function" then tbl = tbl() end
@@ -461,13 +446,12 @@ function BazCore:GetProfileOptionsTable(addonName)
         end
     end
 
-    -- Build a per-profile child group for each profile
     local function BuildProfileArgs()
-        local profileList = BazCore:ListProfiles(addonName)
+        local profileList = BazCore:ListProfiles()
         local profileGroups = {}
 
         for i, profileName in ipairs(profileList) do
-            local isActive = (profileName == BazCore:GetActiveProfile(addonName))
+            local isActive = (profileName == BazCore:GetActiveProfile())
             local isDefault = (profileName == DEFAULT_PROFILE)
 
             profileGroups["profile_" .. i] = {
@@ -492,7 +476,7 @@ function BazCore:GetProfileOptionsTable(addonName)
                                 return
                             end
                             if val and val ~= "" and val ~= profileName then
-                                if BazCore:RenameProfile(addonName, profileName, val) then
+                                if BazCore:RenameProfile(profileName, val) then
                                     BazCore:Print("Renamed '" .. profileName .. "' to '" .. val .. "'")
                                     RefreshProfilesPanel()
                                 else
@@ -505,10 +489,10 @@ function BazCore:GetProfileOptionsTable(addonName)
                         order = 2,
                         type = "execute",
                         name = isActive and "|cff00ff00Active Profile|r" or "Switch to This Profile",
-                        desc = isActive and "This is the current profile" or "Activate this profile",
+                        desc = isActive and "This is the current profile" or "Activate this profile for all Baz Suite addons",
                         func = function()
                             if not isActive then
-                                BazCore:SetActiveProfile(addonName, profileName)
+                                BazCore:SetActiveProfile(profileName)
                                 BazCore:Print("Switched to profile: " .. profileName)
                                 RefreshProfilesPanel()
                             end
@@ -523,10 +507,10 @@ function BazCore:GetProfileOptionsTable(addonName)
                         order = 11,
                         type = "select",
                         name = "Copy Settings From",
-                        desc = "Overwrite this profile with settings from another",
+                        desc = "Overwrite this profile with settings from another (all addons)",
                         values = function()
                             local vals = {}
-                            for _, name in ipairs(BazCore:ListProfiles(addonName)) do
+                            for _, name in ipairs(BazCore:ListProfiles()) do
                                 if name ~= profileName then
                                     vals[name] = name
                                 end
@@ -535,10 +519,14 @@ function BazCore:GetProfileOptionsTable(addonName)
                         end,
                         get = function() return "" end,
                         set = function(_, val)
-                            if BazCore:CopyProfile(addonName, val, profileName) then
+                            if BazCore:CopyProfile(val, profileName) then
                                 BazCore:Print("Copied '" .. val .. "' into '" .. profileName .. "'")
                                 if isActive then
-                                    BazCore:FireProfileChanged(addonName, profileName, profileName)
+                                    for addonName, config in pairs(BazCore.addons) do
+                                        if config.profiles then
+                                            BazCore:FireProfileChanged(addonName, profileName, profileName)
+                                        end
+                                    end
                                 end
                             end
                         end,
@@ -547,11 +535,11 @@ function BazCore:GetProfileOptionsTable(addonName)
                         order = 12,
                         type = "execute",
                         name = "Reset to Defaults",
-                        desc = "Reset this profile to default settings",
+                        desc = "Reset all addon settings in this profile to defaults",
                         confirm = true,
-                        confirmText = "Reset '" .. profileName .. "' to defaults?",
+                        confirmText = "Reset '" .. profileName .. "' to defaults for all addons?",
                         func = function()
-                            BazCore:ResetProfile(addonName, profileName)
+                            BazCore:ResetProfile(profileName)
                             BazCore:Print("'" .. profileName .. "' reset to defaults.")
                         end,
                     },
@@ -568,7 +556,7 @@ function BazCore:GetProfileOptionsTable(addonName)
                             elseif isActive then
                                 BazCore:Print("Cannot delete the active profile. Switch first.")
                             else
-                                BazCore:DeleteProfile(addonName, profileName)
+                                BazCore:DeleteProfile(profileName)
                                 BazCore:Print("Deleted profile: " .. profileName)
                                 RefreshProfilesPanel()
                             end
@@ -589,7 +577,7 @@ function BazCore:GetProfileOptionsTable(addonName)
                         type = "execute",
                         name = "This Character",
                         func = function()
-                            BazCore:AssignProfile(addonName, "character", profileName)
+                            BazCore:AssignProfile("character", profileName)
                             BazCore:Print("'" .. profileName .. "' assigned to this character.")
                         end,
                     },
@@ -598,7 +586,7 @@ function BazCore:GetProfileOptionsTable(addonName)
                         type = "execute",
                         name = "This Class",
                         func = function()
-                            BazCore:AssignProfile(addonName, "class", profileName)
+                            BazCore:AssignProfile("class", profileName)
                             BazCore:Print("'" .. profileName .. "' assigned to this class.")
                         end,
                     },
@@ -607,7 +595,7 @@ function BazCore:GetProfileOptionsTable(addonName)
                         type = "execute",
                         name = "This Spec",
                         func = function()
-                            if BazCore:AssignProfile(addonName, "spec", profileName) then
+                            if BazCore:AssignProfile("spec", profileName) then
                                 BazCore:Print("'" .. profileName .. "' assigned to this spec.")
                             else
                                 BazCore:Print("Could not determine current spec.")
@@ -623,16 +611,23 @@ function BazCore:GetProfileOptionsTable(addonName)
 
     return {
         name = "Profiles",
-        subtitle = displayName .. " profile management",
+        subtitle = "Baz Suite profile management",
         type = "group",
         args = {
-            newProfile = {
+            desc = {
                 order = 1,
+                type = "description",
+                name = "Profiles control settings for all Baz Suite addons at once. " ..
+                    "Switching profiles changes every addon's configuration together.",
+                fontSize = "small",
+            },
+            newProfile = {
+                order = 2,
                 type = "execute",
                 name = "Create New Profile",
-                desc = "Create a new profile",
+                desc = "Create a new profile for all Baz Suite addons",
                 func = function()
-                    local profiles = BazCore:ListProfiles(addonName)
+                    local profiles = BazCore:ListProfiles()
                     local name = "New Profile"
                     local num = 1
                     local nameExists = true
@@ -647,7 +642,7 @@ function BazCore:GetProfileOptionsTable(addonName)
                             end
                         end
                     end
-                    BazCore:CreateProfile(addonName, name)
+                    BazCore:CreateProfile(name)
                     BazCore:Print("Created profile: " .. name)
                     RefreshProfilesPanel()
                 end,

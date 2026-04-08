@@ -1,5 +1,12 @@
 # BazCore Changelog
 
+## 022 - Unified Profile System
+- Profiles now live in BazCoreDB and control all Baz Suite addons at once
+- One profile switch changes every addon's configuration together
+- Profiles page moved from individual addons into BazCore settings
+- Automatic migration of existing per-addon profiles into unified system
+- Per-character, per-class, and per-spec profile assignment
+
 ## 021 - Global Options Page Builder
 - Added BazCore:CreateGlobalOptionsPage() standard page type for global override settings
 - Added disabled property support to toggle and range widget factories
