@@ -71,6 +71,11 @@ local function CreateHeaderWidget(parent, opt, contentWidth)
     return frame, HEADER_HEIGHT
 end
 
+local function IsDisabled(opt)
+    if type(opt.disabled) == "function" then return opt.disabled() end
+    return opt.disabled
+end
+
 local function CreateToggleWidget(parent, opt, contentWidth)
     local height = WIDGET_HEIGHT
     local frame = CreateFrame("Frame", nil, parent)
@@ -92,6 +97,16 @@ local function CreateToggleWidget(parent, opt, contentWidth)
     end
     frame:SetSize(contentWidth, height)
     cb:SetScript("OnClick", function(self) if opt.set then opt.set(nil, self:GetChecked()) end end)
+    if opt.disabled then
+        local function ApplyDisabledState()
+            local off = IsDisabled(opt)
+            cb:SetEnabled(not off)
+            label:SetTextColor(off and 0.5 or 1, off and 0.5 or 1, off and 0.5 or 1)
+            frame:SetAlpha(off and 0.5 or 1)
+        end
+        ApplyDisabledState()
+        frame:SetScript("OnShow", ApplyDisabledState)
+    end
     return frame, height
 end
 
@@ -124,6 +139,18 @@ local function CreateRangeWidget(parent, opt, contentWidth)
         valText:SetText(FormatValue(value))
         if opt.set then opt.set(nil, value) end
     end)
+    if opt.disabled then
+        local function ApplyDisabledState()
+            local off = IsDisabled(opt)
+            slider.Slider:SetEnabled(not off)
+            if slider.IncrementButton then slider.IncrementButton:SetEnabled(not off) end
+            if slider.DecrementButton then slider.DecrementButton:SetEnabled(not off) end
+            label:SetTextColor(off and 0.5 or 1, off and 0.5 or 1, off and 0.5 or 1)
+            frame:SetAlpha(off and 0.5 or 1)
+        end
+        ApplyDisabledState()
+        frame:SetScript("OnShow", ApplyDisabledState)
+    end
     return frame, height
 end
 
@@ -1098,6 +1125,125 @@ function BazCore:CreateLandingPage(addonName, content)
     return {
         name = addonName,
         subtitle = content.subtitle,
+        type = "group",
+        args = args,
+    }
+end
+
+---------------------------------------------------------------------------
+-- Global Options Page Builder
+-- Creates a standard "Global Options" page where each override has
+-- an enable toggle + a value widget. When enabled, the global value
+-- overrides all local (per-module/per-instance) settings of the same key.
+--
+-- Usage:
+--   BazCore:CreateGlobalOptionsPage(addonName, {
+--       getOverrides = function() return db.globalOverrides end,
+--       setOverride = function(key, field, value) ... end,
+--       overrides = {
+--           { key = "toastDuration", label = "Toast Duration", type = "slider",
+--             default = 5, min = 1, max = 15, step = 1 },
+--           { key = "soundEnabled", label = "Play Sound", type = "toggle", default = true },
+--       },
+--   })
+--
+-- The getOverrides function should return a table:
+--   { [key] = { enabled = bool, value = <any> }, ... }
+-- The setOverride function receives (key, "enabled"|"value", newValue).
+---------------------------------------------------------------------------
+
+function BazCore:CreateGlobalOptionsPage(addonName, config)
+    local args = {}
+    local order = 1
+
+    args.desc = {
+        order = order,
+        type = "description",
+        name = "Enable an override to apply it across all modules. " ..
+            "When active, the corresponding local setting in each module is ignored.",
+        fontSize = "small",
+    }
+    order = order + 1
+
+    for _, def in ipairs(config.overrides) do
+        local key = def.key
+
+        -- Section header
+        args[key .. "_header"] = {
+            order = order,
+            type = "header",
+            name = def.label,
+        }
+        order = order + 1
+
+        -- Override enable toggle
+        args[key .. "_enabled"] = {
+            order = order,
+            type = "toggle",
+            name = "Override all modules",
+            desc = "When enabled, all modules use the global value below instead of their local setting.",
+            get = function()
+                local overrides = config.getOverrides()
+                return overrides[key] and overrides[key].enabled or false
+            end,
+            set = function(_, val)
+                config.setOverride(key, "enabled", val)
+                -- Refresh the page to update disabled states
+                BazCore:RefreshOptions(addonName .. "-GlobalOptions")
+            end,
+        }
+        order = order + 1
+
+        -- Value widget (toggle or slider)
+        if def.type == "toggle" then
+            args[key .. "_value"] = {
+                order = order,
+                type = "toggle",
+                name = def.label,
+                get = function()
+                    local overrides = config.getOverrides()
+                    if overrides[key] and overrides[key].value ~= nil then
+                        return overrides[key].value ~= false
+                    end
+                    return def.default ~= false
+                end,
+                set = function(_, val)
+                    config.setOverride(key, "value", val)
+                end,
+                disabled = function()
+                    local overrides = config.getOverrides()
+                    return not (overrides[key] and overrides[key].enabled)
+                end,
+            }
+        elseif def.type == "slider" then
+            args[key .. "_value"] = {
+                order = order,
+                type = "range",
+                name = def.label,
+                min = def.min or 1,
+                max = def.max or 15,
+                step = def.step or 1,
+                get = function()
+                    local overrides = config.getOverrides()
+                    if overrides[key] and overrides[key].value ~= nil then
+                        return overrides[key].value
+                    end
+                    return def.default or def.min or 1
+                end,
+                set = function(_, val)
+                    config.setOverride(key, "value", val)
+                end,
+                disabled = function()
+                    local overrides = config.getOverrides()
+                    return not (overrides[key] and overrides[key].enabled)
+                end,
+            }
+        end
+        order = order + 1
+    end
+
+    return {
+        name = "Global Options",
         type = "group",
         args = args,
     }

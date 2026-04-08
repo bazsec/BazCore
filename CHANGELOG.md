@@ -1,5 +1,11 @@
 # BazCore Changelog
 
+## 021 - Global Options Page Builder
+- Added BazCore:CreateGlobalOptionsPage() standard page type for global override settings
+- Added disabled property support to toggle and range widget factories
+- Widgets with disabled=true (or function) gray out and block interaction
+- Disabled state re-evaluates on every OnShow for dynamic conditions
+
 ## 018 - Audit Fixes
 - Auto-wired addon.db profile proxy via CreateDBProxy() in RegisterAddon
 - Addons no longer need manual profileProxy boilerplate
