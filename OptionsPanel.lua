@@ -35,12 +35,19 @@ end
 
 local function CreateDescriptionWidget(parent, opt, contentWidth)
     local frame = CreateFrame("Frame", nil, parent)
-    local fs = frame:CreateFontString(nil, "OVERLAY", DESC_FONT)
+    -- Default to medium (GameFontNormal) for all descriptions
+    -- Use "small" explicitly for smaller text
+    local font = GameFontNormal
+    if opt.fontSize == "small" then
+        font = GameFontHighlightSmall
+    end
+    local fs = frame:CreateFontString(nil, "OVERLAY")
+    fs:SetFontObject(font)
     fs:SetPoint("TOPLEFT")
     fs:SetWidth(contentWidth)
     fs:SetJustifyH("LEFT")
     fs:SetText(opt.name or "")
-    if opt.fontSize == "medium" then fs:SetFontObject(GameFontNormal) end
+    fs:SetTextColor(0.8, 0.8, 0.8)
     fs:SetWordWrap(true)
     local h = math.max(fs:GetStringHeight() + 4, 12)
     frame:SetSize(contentWidth, h)
@@ -459,19 +466,72 @@ local function CreateTwoPanelLayout(container, optionsTable)
     end
 
     local yOffset = 0
+    local headerHeight = 40
 
-    -- Title bar
+    -- Branded header
     local titleFrame = CreateFrame("Frame", nil, container)
-    titleFrame:SetSize(contentWidth, 36)
     titleFrame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, yOffset)
     titleFrame:Show()
 
+    local titleAnchor = titleFrame  -- anchor point for title text
+    local titleXOffset = PAD
+
+    -- Addon icon: explicit icon property, or auto-read from TOC IconTexture
+    local addonIcon = optionsTable.icon
+    if not addonIcon and optionsTable.name then
+        addonIcon = C_AddOns.GetAddOnMetadata(optionsTable.name, "IconTexture")
+    end
+
+    if addonIcon then
+        headerHeight = 48
+        local iconFrame = CreateFrame("Frame", nil, titleFrame)
+        iconFrame:SetSize(32, 32)
+        iconFrame:SetPoint("LEFT", PAD, 0)
+
+        local icon = iconFrame:CreateTexture(nil, "ARTWORK")
+        icon:SetAllPoints()
+        -- Handle numeric IDs, interface paths, and addon-relative paths
+        local texturePath = addonIcon
+        if type(texturePath) == "string" then
+            texturePath = tonumber(texturePath) or texturePath
+        end
+        icon:SetTexture(texturePath)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+        -- Rounded border for icon
+        local iconBorder = iconFrame:CreateTexture(nil, "OVERLAY")
+        iconBorder:SetSize(36, 36)
+        iconBorder:SetPoint("CENTER")
+        iconBorder:SetAtlas("UI-HUD-ActionBar-IconFrame")
+
+        titleXOffset = PAD + 40
+    end
+
+    titleFrame:SetSize(contentWidth, headerHeight)
+
     local titleText = titleFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    titleText:SetPoint("LEFT", PAD, 0)
+    titleText:SetPoint("LEFT", titleXOffset, addonIcon and 4 or 0)
     titleText:SetText(optionsTable.name or "")
     titleText:SetTextColor(1, 0.82, 0)
 
-    -- Subtitle (from options table, not from description args)
+    -- Version: explicit or auto-read from TOC
+    local addonVersion = optionsTable.version
+    if not addonVersion and optionsTable.name then
+        addonVersion = C_AddOns.GetAddOnMetadata(optionsTable.name, "Version")
+    end
+
+    if addonVersion then
+        local verText = titleFrame:CreateFontString(nil, "OVERLAY", DESC_FONT)
+        if addonIcon then
+            verText:SetPoint("TOPLEFT", titleText, "BOTTOMLEFT", 0, -1)
+        else
+            verText:SetPoint("LEFT", titleText, "RIGHT", 8, 0)
+        end
+        verText:SetText("v" .. addonVersion)
+        verText:SetTextColor(0.5, 0.5, 0.5)
+    end
+
+    -- Subtitle
     if optionsTable.subtitle then
         local subText = titleFrame:CreateFontString(nil, "OVERLAY", DESC_FONT)
         subText:SetPoint("LEFT", titleText, "RIGHT", 10, 0)
@@ -495,13 +555,14 @@ local function CreateTwoPanelLayout(container, optionsTable)
         cbLabel:SetTextColor(0.7, 0.7, 0.7)
     end
 
+    -- Separator line
     local titleLine = titleFrame:CreateTexture(nil, "ARTWORK")
     titleLine:SetHeight(1)
     titleLine:SetPoint("BOTTOMLEFT", PAD, 0)
     titleLine:SetPoint("BOTTOMRIGHT", -PAD, 0)
-    titleLine:SetColorTexture(0.4, 0.4, 0.4, 0.4)
+    titleLine:SetColorTexture(0.6, 0.5, 0.2, 0.4)
 
-    yOffset = yOffset - 40
+    yOffset = yOffset - headerHeight - 4
 
     -- Check if topArgs has any groups
     local hasTopGroups = false
@@ -965,4 +1026,79 @@ function BazCore:RefreshOptions(addonName)
         if type(tbl) == "function" then tbl = tbl() end
         if tbl then RenderIntoCanvas(standaloneWindow.canvas, tbl) end
     end
+end
+
+---------------------------------------------------------------------------
+-- Landing Page Builder
+-- Standard landing page with Description, Features, Quick Guide, Commands
+---------------------------------------------------------------------------
+
+function BazCore:CreateLandingPage(addonName, content)
+    local args = {}
+    local order = 1
+
+    -- Description
+    if content.description then
+        args.desc = {
+            order = order,
+            type = "description",
+            name = content.description,
+        }
+        order = order + 1
+    end
+
+    -- Features
+    if content.features then
+        args.featuresHeader = {
+            order = 10,
+            type = "header",
+            name = "Features",
+        }
+        args.features = {
+            order = 11,
+            type = "description",
+            name = content.features,
+        }
+    end
+
+    -- Quick Guide
+    if content.guide then
+        args.guideHeader = {
+            order = 20,
+            type = "header",
+            name = "Quick Guide",
+        }
+        for i, entry in ipairs(content.guide) do
+            args["guide" .. i] = {
+                order = 20 + i,
+                type = "description",
+                name = "|cffffd700" .. entry[1] .. "|r — " .. entry[2],
+            }
+        end
+    end
+
+    -- Slash Commands
+    if content.commands then
+        args.commandsHeader = {
+            order = 40,
+            type = "header",
+            name = "Slash Commands",
+        }
+        local cmdLines = {}
+        for _, cmd in ipairs(content.commands) do
+            cmdLines[#cmdLines + 1] = "|cff00ff00" .. cmd[1] .. "|r — " .. cmd[2]
+        end
+        args.commands = {
+            order = 41,
+            type = "description",
+            name = table.concat(cmdLines, "\n"),
+        }
+    end
+
+    return {
+        name = addonName,
+        subtitle = content.subtitle,
+        type = "group",
+        args = args,
+    }
 end

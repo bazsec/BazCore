@@ -132,10 +132,22 @@ BazCore:QueueForLogin(function()
 
     BazCoreDB.welcomeMessage = BazCoreDB.welcomeMessage == nil and true or BazCoreDB.welcomeMessage
 
+    -- Landing page
     BazCore:RegisterOptionsTable("BazCore", function()
-        -- Build version info string
+        local landing = BazCore:CreateLandingPage("BazCore", {
+            subtitle = "Shared framework",
+            description = "Shared framework library for the Baz Suite of addons. " ..
+                "Provides profiles, settings panels, Edit Mode integration, events, " ..
+                "slash commands, minimap button, and UI utilities.",
+            features = "Declarative addon registration with lifecycle management. " ..
+                "Profile system with per-character/class/spec assignment. " ..
+                "Two-column options panel with branded headers. " ..
+                "Edit Mode framework with grid snapping and settings popup. " ..
+                "Object pooling, timers, animations, and string safety utilities.",
+        })
+
+        -- Add dynamic Baz Suite versions and memory sections
         local versionLines = {}
-        versionLines[#versionLines + 1] = "|cff3399ffBazCore|r v" .. BazCore.VERSION
         local sorted = {}
         for name, config in pairs(BazCore.addons) do
             sorted[#sorted + 1] = { name = config.title or name, toc = config.savedVariable and name }
@@ -149,7 +161,6 @@ BazCore:QueueForLogin(function()
             versionLines[#versionLines + 1] = "|cffffffff" .. info.name .. "|r v" .. ver
         end
 
-        -- Build memory usage string
         UpdateAddOnMemoryUsage()
         local totalMem = 0
         local memLines = {}
@@ -168,9 +179,20 @@ BazCore:QueueForLogin(function()
         end
         memLines[#memLines + 1] = string.format("|cff3399ffTotal|r — %.0f KB", totalMem)
 
+        landing.args.suiteHeader = { order = 30, type = "header", name = "Baz Suite" }
+        landing.args.versionList = { order = 31, type = "description", name = "|cff3399ffBazCore|r v" .. BazCore.VERSION .. "\n" .. table.concat(versionLines, "\n") }
+        landing.args.memHeader = { order = 40, type = "header", name = "Memory Usage" }
+        landing.args.memList = { order = 41, type = "description", name = table.concat(memLines, "\n") }
+        landing.args.memRefresh = { order = 42, type = "execute", name = "Refresh Memory", func = function() BazCore:RefreshOptions("BazCore") end }
+
+        return landing
+    end)
+    BazCore:AddToSettings("BazCore", "BazCore")
+
+    -- Settings subcategory
+    BazCore:RegisterOptionsTable("BazCore-Settings", function()
         return {
-            name = "BazCore",
-            subtitle = "Shared framework for Baz addons",
+            name = "Settings",
             type = "group",
             args = {
                 minimapBtn = {
@@ -196,42 +218,10 @@ BazCore:QueueForLogin(function()
                     get = function() return BazCoreDB.welcomeMessage end,
                     set = function(_, val) BazCoreDB.welcomeMessage = val end,
                 },
-
-                versionHeader = {
-                    order = 10,
-                    type = "header",
-                    name = "Baz Suite Versions",
-                },
-                versionList = {
-                    order = 11,
-                    type = "description",
-                    name = table.concat(versionLines, "\n"),
-                },
-
-                memHeader = {
-                    order = 20,
-                    type = "header",
-                    name = "Memory Usage",
-                },
-                memList = {
-                    order = 21,
-                    type = "description",
-                    name = table.concat(memLines, "\n"),
-                },
-                memRefresh = {
-                    order = 22,
-                    type = "execute",
-                    name = "Refresh Memory",
-                    func = function()
-                        if BazCore.RefreshOptions then
-                            BazCore:RefreshOptions("BazCore")
-                        end
-                    end,
-                },
             },
         }
     end)
-    BazCore:AddToSettings("BazCore", "BazCore")
+    BazCore:AddToSettings("BazCore-Settings", "Settings", "BazCore")
 end)
 
 ---------------------------------------------------------------------------
