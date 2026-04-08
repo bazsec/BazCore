@@ -61,7 +61,7 @@ a shared framework called BazCore. The core philosophy is:
 
 - MODERN APIs: All addons use Dragonflight+ (12.0 Midnight) APIs. No
   deprecated UIDropDownMenu, no InterfaceOptionsCheckButtonTemplate, no
-  LibStub/Ace3 libraries. Use C_Spell, C_Item, C_MountJournal, MenuUtil,
+  external libraries. Use C_Spell, C_Item, C_MountJournal, MenuUtil,
   Settings API, MinimalScrollBar, MinimalSliderWithSteppersTemplate, etc.
 
 - PROFILES: Every addon that has user-facing settings uses BazCore's profile
@@ -521,7 +521,7 @@ cleans up the internal state. Swaps chain: drop A on B, B goes to internal
 cursor, click C to place B (C goes to cursor if occupied).
 
 RANGE INDICATOR:
-Uses Bartender4 pattern: UpdateUsable() checks _outOfRange first, then
+Uses a unified pattern: UpdateUsable() checks _outOfRange first, then
 normal usability. Out of range = icon red (0.8, 0.1, 0.1) + frame/hotkey/name.
 Full button range is always on (no toggle currently in settings).
 
@@ -633,7 +633,7 @@ via pcall(string.format, "%d", ...).
 
 Resizable map and quest log window.
 
-Single file addon (BazMap.lua). Uses the "Leatrix Maps" approach:
+Single file addon (BazMap.lua). Uses a SetAttribute approach to free the map:
 - WorldMapFrame:SetAttribute("UIPanelLayout-enabled", false)
 - WorldMapFrame:SetAttribute("UIPanelLayout-area", nil)
 - WorldMapFrame:SetAttribute("UIPanelLayout-allowOtherPanels", true)
