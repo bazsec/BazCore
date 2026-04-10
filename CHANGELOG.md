@@ -1,5 +1,10 @@
 # BazCore Changelog
 
+## 023 - SetScaleFromCenter, EditMode fixes
+- Added BazCore:SetScaleFromCenter() utility for scaling frames from their visual center
+- Fixed EditMode position save/restore to use addon object instead of removed Settings module
+- Removed references to non-loaded Settings.lua _settingsProxy
+
 ## 022 - Unified Profile System
 - Profiles now live in BazCoreDB and control all Baz Suite addons at once
 - One profile switch changes every addon's configuration together

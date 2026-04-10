@@ -142,7 +142,10 @@ local function SavePosition(frame, config)
         local ues = UIParent:GetEffectiveScale()
         local x = cx * es - ux * ues
         local y = cy * es - uy * ues
-        BazCore:SetSetting(config.addonName, config.positionKey, { x = x, y = y })
+        local addonObj = BazCore:GetAddon(config.addonName)
+        if addonObj then
+            addonObj:SetSetting(config.positionKey, { x = x, y = y })
+        end
     end
 
     if config.onPositionChanged then
@@ -701,7 +704,8 @@ local function GetWidgetValue(widgetDef, config)
         return widgetDef.get()
     end
     if config.addonName and widgetDef.key then
-        return BazCore:GetSetting(config.addonName, widgetDef.key)
+        local addonObj = BazCore:GetAddon(config.addonName)
+        if addonObj then return addonObj:GetSetting(widgetDef.key) end
     end
     return nil
 end
@@ -710,7 +714,8 @@ local function SetWidgetValue(widgetDef, config, value)
     if widgetDef.set then
         widgetDef.set(value)
     elseif config.addonName and widgetDef.key then
-        BazCore:SetSetting(config.addonName, widgetDef.key, value)
+        local addonObj = BazCore:GetAddon(config.addonName)
+        if addonObj then addonObj:SetSetting(widgetDef.key, value) end
     end
     if config.onSettingChanged and widgetDef.key then
         config.onSettingChanged(selectedFrame, widgetDef.key, value)
@@ -823,7 +828,8 @@ local function PopulatePopup(frame, config)
                 btn:SetScript("OnClick", function()
                     if not selectedFrame then return end
                     if config.positionKey and config.positionKey ~= false and config.addonName then
-                        BazCore:SetSetting(config.addonName, config.positionKey, nil)
+                        local addonObj = BazCore:GetAddon(config.addonName)
+                        if addonObj then addonObj:SetSetting(config.positionKey, nil) end
                     end
                     selectedFrame:ClearAllPoints()
                     local defaultPos = config.defaultPosition or { x = 0, y = 0 }

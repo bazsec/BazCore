@@ -262,6 +262,36 @@ function BazCore:MakeResizable(frame, opts)
 end
 
 ---------------------------------------------------------------------------
+-- Scale From Center
+-- Sets a frame's scale while keeping its visual center in the same
+-- screen position. Use this instead of raw frame:SetScale().
+---------------------------------------------------------------------------
+
+function BazCore:SetScaleFromCenter(frame, newScale, minScale, maxScale)
+    minScale = minScale or 0.5
+    maxScale = maxScale or 3.0
+    newScale = math.max(minScale, math.min(maxScale, newScale))
+
+    -- Capture center in screen pixels
+    local cx, cy = frame:GetCenter()
+    local oldScale = frame:GetScale()
+    if cx and cy then
+        cx = cx * oldScale
+        cy = cy * oldScale
+    end
+
+    frame:SetScale(newScale)
+
+    -- Re-anchor so center stays at the same screen position
+    if cx and cy then
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", cx / newScale, cy / newScale)
+    end
+
+    return newScale
+end
+
+---------------------------------------------------------------------------
 -- StatusBar Factory
 -- Creates a styled status bar with optional label and value text
 ---------------------------------------------------------------------------

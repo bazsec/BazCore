@@ -17,32 +17,23 @@ end
 ---------------------------------------------------------------------------
 
 function BazCore:GetSetting(addonName, key)
-    local config = self.addons[addonName]
-    if not config then return nil end
-
-    -- Profile-aware: read from active profile if available
-    if config._settingsProxy then
-        local val = config._settingsProxy[key]
+    local addonObj = self.addonObjects[addonName]
+    if addonObj and addonObj.db and addonObj.db.profile then
+        local val = addonObj.db.profile[key]
         if val ~= nil then return val end
-        return config.defaults and config.defaults[key]
     end
 
-    local sv = _G[config.savedVariable]
-    if sv and sv[key] ~= nil then return sv[key] end
-    return config.defaults and config.defaults[key]
+    local config = self.addons[addonName]
+    return config and config.defaults and config.defaults[key]
 end
 
 function BazCore:SetSetting(addonName, key, value)
     local config = self.addons[addonName]
     if not config then return end
 
-    -- Profile-aware: write to active profile if available
-    if config._settingsProxy then
-        config._settingsProxy[key] = value
-    else
-        local svName = config.savedVariable
-        _G[svName] = _G[svName] or {}
-        _G[svName][key] = value
+    local addonObj = self.addonObjects[addonName]
+    if addonObj and addonObj.db and addonObj.db.profile then
+        addonObj.db.profile[key] = value
     end
 
     if config.onChange then
@@ -86,8 +77,9 @@ function BazCore:BuildSettingsPanel(addonName, config)
     local category = Settings.RegisterVerticalLayoutCategory(config.title or addonName)
     config.category = category
 
-    -- Use profile proxy table if available, otherwise raw SV
-    local sv = config._settingsProxy or _G[config.savedVariable]
+    -- Use addon db proxy if available, otherwise raw SV
+    local addonObj = self.addonObjects[addonName]
+    local sv = (addonObj and addonObj.db and addonObj.db.profile) or _G[config.savedVariable]
 
     for _, opt in ipairs(config.options) do
         if opt.type == "toggle" then
