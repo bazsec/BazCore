@@ -272,11 +272,55 @@ end
 
 ---------------------------------------------------------------------------
 -- Notification Bridge
--- Routes to BazNotificationCenter if installed, nil otherwise
+-- Routes to BazNotificationCenter if installed, nil otherwise.
+--
+-- Baz Suite addons that want to push notifications call:
+--   BazCore:RegisterNotificationModule("BazBars", { icon = ..., label = ... })
+-- and then:
+--   BazCore:PushNotification({ module = "BazBars", title = "...", ... })
+--
+-- If BNC isn't installed, both calls silently do nothing so addons don't
+-- need to guard against missing BNC themselves.
 ---------------------------------------------------------------------------
 
-function BazCore:PushNotification(data)
-    if BazNotificationCenter and BazNotificationCenter.Push then
-        return BazNotificationCenter:Push(data)
-    end
+local registeredNotificationModules = {}
+
+local function TryRegisterModule(moduleId, info)
+    if not BazNotificationCenter or not BNC or not BNC.RegisterModule then return end
+    if registeredNotificationModules[moduleId] then return end
+    BNC:RegisterModule({
+        id = moduleId,
+        name = info.label or moduleId,
+        icon = info.icon or "Interface\\Icons\\INV_Misc_Bell_01",
+    })
+    registeredNotificationModules[moduleId] = true
 end
+
+function BazCore:RegisterNotificationModule(moduleId, info)
+    if not moduleId then return end
+    info = info or {}
+    -- Remember the registration so we can re-apply it when BNC loads later
+    registeredNotificationModules[moduleId] = registeredNotificationModules[moduleId] or false
+    TryRegisterModule(moduleId, info)
+    -- Store info for late registration if BNC isn't loaded yet
+    registeredNotificationModules[moduleId .. "_info"] = info
+end
+
+function BazCore:PushNotification(data)
+    if not BazNotificationCenter or not BazNotificationCenter.Push then return end
+    if data and data.module and not registeredNotificationModules[data.module] then
+        -- Lazy-register on first push if caller forgot to register explicitly
+        local info = registeredNotificationModules[data.module .. "_info"] or {}
+        TryRegisterModule(data.module, info)
+    end
+    return BazNotificationCenter:Push(data)
+end
+
+-- Auto-register the BazCore internal module for things like profile-change
+-- toasts. Done on PLAYER_LOGIN so BNC has finished loading.
+BazCore:QueueForLogin(function()
+    BazCore:RegisterNotificationModule("_bazcore", {
+        label = "BazCore",
+        icon = "Interface\\Icons\\INV_Gizmo_GoblingTonkController",
+    })
+end)

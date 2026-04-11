@@ -80,6 +80,26 @@ function BazCore:InitProfiles()
         sv.profiles[DEFAULT_PROFILE] = {}
     end
 
+    -- Auto-create per-character profile on first login
+    local charKey = GetCharacterKey()
+    if charKey ~= "Unknown" and not sv.assignments[charKey] then
+        local charProfile = charKey
+        if not sv.profiles[charProfile] then
+            -- Copy from Default so new characters start with defaults
+            sv.profiles[charProfile] = {}
+            if sv.profiles[DEFAULT_PROFILE] then
+                for k, v in pairs(sv.profiles[DEFAULT_PROFILE]) do
+                    if type(v) == "table" then
+                        sv.profiles[charProfile][k] = CopyTable(v)
+                    else
+                        sv.profiles[charProfile][k] = v
+                    end
+                end
+            end
+        end
+        sv.assignments[charKey] = charProfile
+    end
+
     -- Resolve which profile this character should use
     sv.activeProfile = self:ResolveProfile() or DEFAULT_PROFILE
 
@@ -212,6 +232,17 @@ function BazCore:SetActiveProfile(profileName)
         if config.profiles then
             self:FireProfileChanged(addonName, profileName, oldProfile)
         end
+    end
+
+    -- Push a toast through BazNotificationCenter if it's installed
+    if oldProfile ~= profileName then
+        BazCore:PushNotification({
+            module = "_bazcore",
+            title = "Profile Changed",
+            message = "Switched to " .. profileName,
+            icon = "Interface\\Icons\\INV_Misc_Book_09",
+            priority = "low",
+        })
     end
     return true
 end

@@ -1,5 +1,11 @@
 # BazCore Changelog
 
+## 024 - Notification Bridge
+- Added `BazCore:RegisterNotificationModule(id, info)` for Baz Suite addons to register with BazNotificationCenter
+- Added `BazCore:PushNotification(data)` that routes through BNC (no-op if BNC isn't installed)
+- Lazy-registers modules on first push so addons don't have to think about load order
+- Profile switches now fire a "Profile Changed" toast via the internal `_bazcore` module
+
 ## 023 - SetScaleFromCenter, EditMode fixes
 - Added BazCore:SetScaleFromCenter() utility for scaling frames from their visual center
 - Fixed EditMode position save/restore to use addon object instead of removed Settings module
