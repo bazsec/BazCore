@@ -1,5 +1,10 @@
 # BazCore Changelog
 
+## 025 - Addon List Button, Toggle Padding
+- Added an "Addon Options" button to Blizzard's AddOn List window that opens directly to the BazCore options category
+- Fixed the toggle widget in two-column options panels so multi-line descriptions no longer overflow their card's bottom padding
+  - Checkbox now anchors to the top of the widget frame instead of the vertical center
+
 ## 024 - Notification Bridge
 - Added `BazCore:RegisterNotificationModule(id, info)` for Baz Suite addons to register with BazNotificationCenter
 - Added `BazCore:PushNotification(data)` that routes through BNC (no-op if BNC isn't installed)

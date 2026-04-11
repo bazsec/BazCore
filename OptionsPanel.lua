@@ -80,7 +80,10 @@ local function CreateToggleWidget(parent, opt, contentWidth)
     local height = WIDGET_HEIGHT
     local frame = CreateFrame("Frame", nil, parent)
     local cb = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    cb:SetPoint("LEFT", 0, 0)
+    -- Anchor top-down so a tall multi-line description doesn't push the
+    -- content off the bottom of the frame (a LEFT anchor would center the
+    -- checkbox and any wrapped description would overflow below).
+    cb:SetPoint("TOPLEFT", 0, -4)
     cb:SetSize(20, 20)
     if opt.get then cb:SetChecked(opt.get()) end
     local label = frame:CreateFontString(nil, "OVERLAY", LABEL_FONT)
