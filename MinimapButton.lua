@@ -77,12 +77,16 @@ local function CreateButton()
     bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
     bg:SetVertexColor(0.1, 0.1, 0.15, 0.8)
 
-    -- Icon
+    -- Icon — masked to a circle so it blends into the minimap-button
+    -- tracking border instead of showing as a square inside a ring.
+    -- SetMask uses the alpha channel of the mask texture to clip the
+    -- icon; `TempPortraitAlphaMask` is Blizzard's standard circular
+    -- portrait mask and produces a clean round icon.
     local icon = btn:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(18, 18)
+    icon:SetSize(20, 20)
     icon:SetPoint("CENTER")
     icon:SetTexture("Interface\\Icons\\INV_Gizmo_GoblingTonkController")
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- trim default icon border
+    icon:SetMask("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
     btn.icon = icon
 
     -- Border ring

@@ -1,5 +1,15 @@
 # BazCore Changelog
 
+## 026 - DockableWidget API, Modules Page, Minimap Icon Mask
+- New `DockableWidget.lua` module exposing the cross-addon dockable widget registry used by BazDrawer
+  - `BazCore:RegisterDockableWidget(widget)` — registers a widget to appear in BazDrawer's slot stack
+  - `BazCore:UnregisterDockableWidget(id)` — removes a widget from the registry
+  - `BazCore:GetDockableWidgets()` / `GetDockableWidget(id)` — read the registry
+  - `BazCore:RegisterDockableWidgetCallback(fn)` — subscribe to registry changes
+  - Widget contract: `id`, `label`, `designWidth`, `designHeight`, `frame`, and optional `GetDesiredHeight`, `GetStatusText`, `GetOptionsArgs`, `OnDock`, `OnUndock`
+- New `BazCore:CreateModulesPage(addonName, config)` helper — builds a standard "Modules" subcategory with a flat list of enable/disable toggles, used by BNC for notification modules and by BazDrawer for dockable widgets
+- Minimap button icon now uses a circular alpha mask (`Interface\CHARACTERFRAME\TempPortraitAlphaMask`) so it blends into the tracking border instead of showing as a square inside a ring; icon size bumped 18→20 to fill the new circular frame
+
 ## 025 - Addon List Button, Toggle Padding
 - Added an "Addon Options" button to Blizzard's AddOn List window that opens directly to the BazCore options category
 - Fixed the toggle widget in two-column options panels so multi-line descriptions no longer overflow their card's bottom padding

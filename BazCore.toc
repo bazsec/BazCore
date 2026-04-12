@@ -2,7 +2,7 @@
 ## Title: BazCore
 ## Notes: Shared framework for Baz addons
 ## Author: Baz4k
-## Version: 025
+## Version: 026
 ## X-License: GPL v2
 ## Category: Baz Suite
 ## X-Curse-Project-ID: 1503896
@@ -31,3 +31,4 @@ EditMode.lua
 Serialization.lua
 OptionsPanel.lua
 AddonListButton.lua
+DockableWidget.lua

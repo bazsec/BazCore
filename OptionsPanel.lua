@@ -1251,3 +1251,63 @@ function BazCore:CreateGlobalOptionsPage(addonName, config)
         args = args,
     }
 end
+
+---------------------------------------------------------------------------
+-- CreateModulesPage
+--
+-- Standardized "Modules" subcategory — a flat list of enable/disable
+-- toggles for each module/widget in the addon. Used by BNC for its
+-- notification modules and by BazDrawer for its dockable widgets.
+--
+-- Usage:
+--   BazCore:CreateModulesPage(addonName, {
+--       description = "Enable or disable individual modules.",
+--       getModules = function()
+--           -- Returns array of { id = "...", name = "..." }
+--       end,
+--       isEnabled = function(id) return addon.db[id] end,
+--       setEnabled = function(id, val) addon.db[id] = val end,
+--   })
+---------------------------------------------------------------------------
+
+function BazCore:CreateModulesPage(addonName, config)
+    local args = {}
+
+    if config.description then
+        args.desc = {
+            order = 1,
+            type = "description",
+            name = config.description,
+            fontSize = "small",
+        }
+    end
+
+    local modules = config.getModules and config.getModules() or {}
+    -- Stable sort by display name for predictable order
+    table.sort(modules, function(a, b)
+        return (a.name or a.id or "") < (b.name or b.id or "")
+    end)
+
+    for i, mod in ipairs(modules) do
+        local id = mod.id
+        args["mod_" .. id] = {
+            order = 10 + i,
+            type = "toggle",
+            name = mod.name or id,
+            desc = mod.desc,
+            get = function()
+                if config.isEnabled then return config.isEnabled(id) end
+                return true
+            end,
+            set = function(_, val)
+                if config.setEnabled then config.setEnabled(id, val) end
+            end,
+        }
+    end
+
+    return {
+        name = "Modules",
+        type = "group",
+        args = args,
+    }
+end
