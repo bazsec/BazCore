@@ -10,6 +10,7 @@
 ## AddonCompartmentFunc: BazCore_Compartment_OnClick
 ## AddonCompartmentFuncOnEnter: BazCore_Compartment_OnEnter
 ## AddonCompartmentFuncOnLeave: BazCore_Compartment_OnLeave
+## OptionalDeps: LibBazWidget-1.0
 ## IconTexture: Interface\Icons\INV_Gizmo_GoblingTonkController
 
 Core.lua
