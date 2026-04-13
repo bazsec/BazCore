@@ -1,5 +1,13 @@
 package-as: BazCore
 
+externals:
+  Libs/LibStub:
+    url: https://repos.wowace.com/wow/libstub/trunk
+    tag: 1.0
+  Libs/LibBazWidget-1.0:
+    url: https://github.com/bazsec/LibBazWidget
+    tag: latest
+
 ignore:
   - .git
   - .gitignore
