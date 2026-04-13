@@ -1,125 +1,97 @@
-<h1 align="center">BazCore</h1>
+# BazCore
 
-<p align="center">
-  <strong>Shared framework for Baz addons</strong><br/>
-  A lightweight, zero-dependency foundation library for World of Warcraft addon development.
-</p>
+![WoW](https://img.shields.io/badge/WoW-12.0_Midnight-blue) ![License](https://img.shields.io/badge/License-GPL_v2-green) ![Version](https://img.shields.io/github/v/tag/bazsec/BazCore?label=Version&color=orange)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/WoW-12.0%20Midnight-blue" alt="WoW Version"/>
-  <img src="https://img.shields.io/badge/License-GPL%20v2-green" alt="License"/>
-  <img src="https://img.shields.io/github/v/tag/bazsec/BazCore?label=Version&color=orange" alt="Version"/>
-</p>
+Shared framework for the Baz Suite of World of Warcraft addons.
 
----
+BazCore is the foundation library that powers every addon in the Baz Suite. It handles addon registration, saved variables, unified profiles, settings panels, Edit Mode integration, minimap buttons, slash commands, event dispatching, and more - so each addon can focus on its own features without reinventing boilerplate.
 
-## What is BazCore?
+BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), the standalone widget registry library that powers BazWidgetDrawers' dockable widget system.
 
-BazCore is a shared framework library that provides common functionality for all Baz addons. It replaces the need for Ace3, LibStub, LibButtonGlow, LibDBIcon, and other third-party libraries with a single, purpose-built dependency.
+***
 
-**For addon users:** Install BazCore alongside any Baz addon that requires it. It runs silently in the background.
+## Features
 
-**For addon developers:** BazCore provides a declarative API for addon lifecycle, events, settings, profiles, slash commands, UI components, animations, keybinds, serialization, and more.
+### Addon Framework
 
----
+*   **RegisterAddon** - one-call registration with title, saved variable, defaults, slash commands, minimap button, and lifecycle callbacks
+*   **Unified profiles** - one profile controls all Baz Suite addons at once, stored in BazCoreDB
+*   **Profile migration** - automatically migrates old per-addon SavedVariables into the unified system
 
-## Modules
+### Settings Panel
 
-| Module | Replaces | Description |
-|--------|----------|-------------|
-| **Core** | AceAddon | Addon registry, lifecycle management, addon object prototype |
-| **Events** | AceEvent, CallbackHandler | Unified WoW event + custom event system with per-addon registration |
-| **Settings** | — | Dragonflight+ vertical layout settings panel builder |
-| **Profiles** | AceDB, AceDBOptions | Named profile system with per-character/class/spec assignment |
-| **Commands** | AceConsole | Declarative slash command framework with auto-generated help |
-| **UI** | — | Colors, branded print, backdrop factory, fade helpers, tooltip, draggable, status bars |
-| **Timers** | — | Managed timers, throttle, debounce, cooldown with per-addon cleanup |
-| **Format** | — | Money, time, number, and text formatting utilities |
-| **Locale** | — | Simple localization system with passthrough fallback |
-| **Menu** | — | Declarative context menu wrapper around MenuUtil |
-| **Animations** | — | Reusable animation presets: pulse, bounce, flash, slide |
-| **MinimapButton** | LibDBIcon, LibDataBroker | Single shared minimap button for all Baz addons |
-| **ButtonGlow** | LibButtonGlow | Spell proc overlay glow effect using animation groups |
-| **Compartment** | — | Addon Compartment integration (Dragonflight+ minimap dropdown) |
-| **Keybinds** | — | Override keybinding framework with capture UI |
-| **EditMode** | — | Helpers for integrating frames with Blizzard's Edit Mode |
-| **Serialization** | AceSerializer | Table serialization + Base64 encoding for import/export |
-| **OptionsPanel** | AceConfig, AceGUI | Rich options table renderer (AceConfig-style replacement) |
+*   **Standard page types** - Landing Page, Settings (two-column), List + Detail, Modules, Global Options, and Profiles
+*   **Two-column layout** - toggles and sliders auto-arrange into bordered panels when the window is wide enough
+*   **Half-width buttons** - execute buttons with `width = "half"` render side by side
+*   **Selection persistence** - list/detail panels remember the selected item across refreshes
 
----
+### Edit Mode Integration
 
-## For Addon Developers
+*   **RegisterEditModeFrame** - register any frame as an Edit Mode target with drag, snap, settings popup, and nudge controls
+*   **Grid snapping** with live preview lines
+*   **Selection sync** - selecting a BazCore frame deselects Blizzard frames and vice versa
+*   **Settings popup** with checkboxes, sliders, and action buttons translated from the addon's options
 
-### Registering an Addon
+### Dockable Widget API
 
-```lua
-BazCore:RegisterAddon("MyAddon", {
-    title = "My Addon",
-    savedVariable = "MyAddonSV",
-    defaults = {
-        enabled = true,
-        scale = 1.0,
-    },
-    OnInitialize = function(addon)
-        -- Called on ADDON_LOADED
-    end,
-    OnEnable = function(addon)
-        -- Called on PLAYER_LOGIN
-    end,
-})
-```
+*   **RegisterDockableWidget** / **UnregisterDockableWidget** - shims through to LibBazWidget-1.0
+*   **GetDockableWidgets** / **GetDockableWidget** - query the widget registry
+*   **RegisterDockableWidgetCallback** - subscribe to registry changes
+*   **Widget contract** - id, label, frame, designWidth, designHeight, plus optional GetDesiredHeight, GetStatusText, GetOptionsArgs, OnDock, OnUndock
 
-### Events
+### Notification Bridge
 
-```lua
-local addon = BazCore:GetAddon("MyAddon")
-addon:On("PLAYER_TARGET_CHANGED", function() ... end)
-addon:Fire("MY_CUSTOM_EVENT", data)
-```
+*   **RegisterNotificationModule** / **PushNotification** - route notifications through BazNotificationCenter when installed
+*   Lazy module registration on first push - no load order worries
 
-### Settings
+### Utilities
 
-```lua
-local value = BazCore:GetSetting("MyAddon", "scale")
-BazCore:SetSetting("MyAddon", "scale", 1.5)
-```
+*   **Events** - event dispatching and QueueForLogin helper
+*   **Timers** - throttle and debounce helpers
+*   **ObjectPool** - frame pooling for recycling UI elements
+*   **Format** - number formatting, time formatting, safe string handling
+*   **Animations** - fade, slide, and scale animation helpers
+*   **ButtonGlow** - spell proc glow overlay system
+*   **Keybinds** - keybind management with SetOverrideBindingClick
+*   **Serialization** - export/import config strings
+*   **Locale** - localization stub
 
-### Slash Commands
+***
 
-```lua
--- Declared in addon config
-commands = {
-    { cmd = "toggle", desc = "Toggle addon", handler = function(addon) ... end },
-    { cmd = "reset", desc = "Reset settings", handler = function(addon) ... end },
-}
-```
+## Slash Commands
 
----
+| Command | Description |
+| --- | --- |
+| `/bazcore` | Open BazCore settings |
 
-## Installation
-
-Install BazCore alongside any Baz addon that lists it as a dependency.
-
-Extract to `World of Warcraft/_retail_/Interface/AddOns/BazCore/`
-
----
+***
 
 ## Compatibility
 
-| | |
-|---|---|
-| **WoW Version** | Retail 12.0.1 (Midnight) |
-| **Dependencies** | None — completely standalone |
-| **API Safety** | Uses modern Midnight APIs, animation groups for fades, Settings.VarType enums |
+*   **WoW Version:** Retail 12.0 (Midnight)
+*   **Zero external dependencies** - BazCore depends on nothing except WoW itself
+*   **Midnight API Safe** - uses taint-safe patterns throughout
+*   **LibStub** - embedded for LibBazWidget-1.0 version negotiation
+*   **LibBazWidget-1.0** - embedded standalone widget registry library
 
----
+***
+
+## The Baz Suite
+
+BazCore powers the following addons:
+
+*   **[BazBars](https://www.curseforge.com/wow/addons/bazbars)** - Custom extra action bars
+*   **[BazWidgetDrawers](https://www.curseforge.com/wow/addons/bazwidgetdrawers)** - Slide-out widget drawer
+*   **[BazWidgets](https://www.curseforge.com/wow/addons/bazwidgets)** - Widget pack for BazWidgetDrawers
+*   **[BazNotificationCenter](https://www.curseforge.com/wow/addons/baznotificationcenter)** - Toast notification system
+*   **[BazLootNotifier](https://www.curseforge.com/wow/addons/bazlootnotifier)** - Animated loot popups
+*   **[BazDungeonFinder](https://www.curseforge.com/wow/addons/bazdungeonfinder)** - Detached LFG queue bar
+*   **[BazFlightZoom](https://www.curseforge.com/wow/addons/bazflightzoom)** - Auto zoom on flying mounts
+*   **[BazMap](https://www.curseforge.com/wow/addons/bazmap)** - Resizable map and quest log window
+*   **[BazMapPortals](https://www.curseforge.com/wow/addons/bazmapportals)** - Mage portal/teleport map pins
+
+***
 
 ## License
 
-BazCore is licensed under the [GNU General Public License v2](LICENSE) (GPL v2).
-
----
-
-<p align="center">
-  <sub>Built by <strong>Baz4k</strong></sub>
-</p>
+BazCore is licensed under the **GNU General Public License v2** (GPL v2).
