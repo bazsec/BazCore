@@ -4,7 +4,7 @@
 -- Standalone widget registry library distributed via LibStub. Provides a
 -- simple publish/subscribe contract between widget *publishers* (any addon
 -- that creates a dockable widget) and widget *consumers* (any addon that
--- hosts/displays widgets, e.g. BazDrawer).
+-- hosts/displays widgets, e.g. BazWidgetDrawers).
 --
 -- Publishers call :RegisterWidget(widget) with a table containing at
 -- minimum an `id` field. Consumers call :GetWidgets() to enumerate and
