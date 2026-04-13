@@ -30,7 +30,7 @@ local function SortedArgs(args)
 end
 
 ---------------------------------------------------------------------------
--- Widget Factories — each returns (frame, height)
+-- Widget Factories - each returns (frame, height)
 ---------------------------------------------------------------------------
 
 local function CreateDescriptionWidget(parent, opt, contentWidth)
@@ -183,8 +183,9 @@ end
 
 local function CreateExecuteWidget(parent, opt, contentWidth)
     local frame = CreateFrame("Frame", nil, parent)
+    local isHalf = (opt.width == "half")
     frame:SetSize(contentWidth, WIDGET_HEIGHT + 4)
-    local btnWidth = math.min(220, contentWidth)
+    local btnWidth = isHalf and contentWidth or math.min(220, contentWidth)
     local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     btn:SetPoint("LEFT", 0, 0)
     btn:SetSize(btnWidth, WIDGET_HEIGHT)
@@ -307,16 +308,41 @@ local function RenderWidgets(parent, args, contentWidth, forceColumns, startY)
     local useTwoCol = (forceColumns ~= 1) and (contentWidth > 500)
 
     if not useTwoCol then
-        -- Single column: simple linear layout
-        for _, opt in ipairs(sorted) do
+        -- Single column: simple linear layout with half-width pairing
+        local i = 1
+        while i <= #sorted do
+            local opt = sorted[i]
             if opt.type ~= "group" then
-                local factory = widgetFactories[opt.type]
-                if factory then
-                    local widget, h = factory(parent, opt, contentWidth)
-                    widget:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
-                    widget:Show()
-                    yOffset = yOffset - h - SPACING
+                local nextOpt = sorted[i + 1]
+                -- Pair consecutive half-width items side by side
+                if opt.width == "half" and nextOpt and nextOpt.width == "half" and nextOpt.type ~= "group" then
+                    local halfW = math.floor((contentWidth - COL_GAP) / 2)
+                    local factory1 = widgetFactories[opt.type]
+                    local factory2 = widgetFactories[nextOpt.type]
+                    if factory1 and factory2 then
+                        local w1, h1 = factory1(parent, opt, halfW)
+                        local w2, h2 = factory2(parent, nextOpt, halfW)
+                        w1:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
+                        w2:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD + halfW + COL_GAP, yOffset)
+                        w1:Show()
+                        w2:Show()
+                        yOffset = yOffset - math.max(h1, h2) - SPACING
+                        i = i + 2
+                    else
+                        i = i + 1
+                    end
+                else
+                    local factory = widgetFactories[opt.type]
+                    if factory then
+                        local widget, h = factory(parent, opt, contentWidth)
+                        widget:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, yOffset)
+                        widget:Show()
+                        yOffset = yOffset - h - SPACING
+                    end
+                    i = i + 1
                 end
+            else
+                i = i + 1
             end
         end
         return yOffset
@@ -331,7 +357,8 @@ local function RenderWidgets(parent, args, contentWidth, forceColumns, startY)
 
     for _, opt in ipairs(sorted) do
         if opt.type ~= "group" then
-            local fullWidth = (opt.type == "header" or opt.type == "description" or opt.type == "execute")
+            local fullWidth = (opt.type == "header" or opt.type == "description"
+                or (opt.type == "execute" and opt.width ~= "half"))
             if fullWidth then
                 if #currentLeft > 0 or #currentRight > 0 then
                     table.insert(sections, { type = "pair", left = currentLeft, right = currentRight })
@@ -694,7 +721,7 @@ local function CreateTwoPanelLayout(container, optionsTable)
         hdr:Show()
         yOffset = yOffset - hh - 4
 
-        -- Split frame — anchors to bottom of container to fill space
+        -- Split frame - anchors to bottom of container to fill space
         local splitFrame = CreateFrame("Frame", nil, container)
         splitFrame:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
         splitFrame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -PAD, PAD)
@@ -779,11 +806,12 @@ local function CreateTwoPanelLayout(container, optionsTable)
             end
         end
 
-        local selectedItem = nil
+        local selectedItem = container._lastSelectedItem or nil
         local listButtons = {}
 
         local function SelectGroup(index)
             selectedItem = index
+            container._lastSelectedItem = index
             for i, btn in ipairs(listButtons) do
                 if i == index then
                     btn.bg:SetColorTexture(0.15, 0.35, 0.6, 0.6)
@@ -834,11 +862,15 @@ local function CreateTwoPanelLayout(container, optionsTable)
         end
         listContent:SetHeight(listY)
 
-        -- Auto-select first
+        -- Auto-select: restore previous selection if valid, else first item
         if #childGroups > 0 then
             C_Timer.After(0, function()
                 detailContent:SetWidth(detailFrame:GetWidth() - 28)
-                SelectGroup(1)
+                local restoreIdx = container._lastSelectedItem
+                if not restoreIdx or restoreIdx < 1 or restoreIdx > #childGroups then
+                    restoreIdx = 1
+                end
+                SelectGroup(restoreIdx)
             end)
         end
 
@@ -932,11 +964,11 @@ local function RenderIntoCanvas(container, optionsTable)
     end
 
     if hasTwoPanel then
-        -- Hide the scroll frame — we render directly on the container
+        -- Hide the scroll frame - we render directly on the container
         container.scroll:Hide()
         CreateTwoPanelLayout(container, optionsTable)
     else
-        -- Simple layout — use the scroll frame
+        -- Simple layout - use the scroll frame
         container.scroll:Show()
         local cw = content:GetWidth()
         if cw <= 0 then cw = 560 end
@@ -1102,7 +1134,7 @@ function BazCore:CreateLandingPage(addonName, content)
             args["guide" .. i] = {
                 order = 20 + i,
                 type = "description",
-                name = "|cffffd700" .. entry[1] .. "|r — " .. entry[2],
+                name = "|cffffd700" .. entry[1] .. "|r - " .. entry[2],
             }
         end
     end
@@ -1116,7 +1148,7 @@ function BazCore:CreateLandingPage(addonName, content)
         }
         local cmdLines = {}
         for _, cmd in ipairs(content.commands) do
-            cmdLines[#cmdLines + 1] = "|cff00ff00" .. cmd[1] .. "|r — " .. cmd[2]
+            cmdLines[#cmdLines + 1] = "|cff00ff00" .. cmd[1] .. "|r - " .. cmd[2]
         end
         args.commands = {
             order = 41,
@@ -1255,7 +1287,7 @@ end
 ---------------------------------------------------------------------------
 -- CreateModulesPage
 --
--- Standardized "Modules" subcategory — a flat list of enable/disable
+-- Standardized "Modules" subcategory - a flat list of enable/disable
 -- toggles for each module/widget in the addon. Used by BNC for its
 -- notification modules and by BazDrawer for its dockable widgets.
 --
