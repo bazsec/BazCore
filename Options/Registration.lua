@@ -41,10 +41,12 @@ local function GetTopLevelEntries()
             entries[#entries + 1] = { name = name, entry = entry }
         end
     end
-    -- BazCore always first, then alphabetical
+    -- BazCore always first, User Manual always last, rest alphabetical
     table.sort(entries, function(a, b)
         if a.name == "BazCore" then return true end
         if b.name == "BazCore" then return false end
+        if a.name == "UserManual" then return false end
+        if b.name == "UserManual" then return true end
         return a.name < b.name
     end)
     return entries
@@ -53,22 +55,45 @@ end
 -- Returns a sorted array of sub-category entries for a given parent.
 -- Includes the parent itself as the first entry (landing page).
 local function GetSubcategoriesFor(parentName)
-    local list = {}
     local parentEntry = optionsTables[parentName]
-    if parentEntry then
-        list[#list + 1] = {
-            key = parentName,
-            label = parentEntry.displayName or parentName,
-            isRoot = true,
-        }
-    end
     local children = {}
     for name, entry in pairs(optionsTables) do
         if entry.parent == parentName and entry.displayName then
             children[#children + 1] = { key = name, label = entry.displayName }
         end
     end
-    table.sort(children, function(a, b) return a.label < b.label end)
+    -- Sort order:
+    --   1. "Settings" first       (the most common landing spot)
+    --   2. Other sub-categories   (alphabetical)
+    --   3. "User Guide"           (docs near the bottom)
+    --   4. "Profiles" last        (least frequently used)
+    table.sort(children, function(a, b)
+        if a.label == "Settings" then return true end
+        if b.label == "Settings" then return false end
+        if a.label == "Profiles" then return false end
+        if b.label == "Profiles" then return true end
+        if a.label == "User Guide" then return false end
+        if b.label == "User Guide" then return true end
+        return a.label < b.label
+    end)
+
+    local list = {}
+    -- Show the parent (landing) entry only when:
+    --   * it has no children to navigate to, OR
+    --   * the parent explicitly opts in via showRoot = true
+    -- This means every addon defaults to "click tab -> land on first
+    -- sub-category" with no separate landing page in the way.
+    -- An explicit hideRoot still wins over showRoot.
+    local includeParent = parentEntry
+        and not parentEntry.hideRoot
+        and (#children == 0 or parentEntry.showRoot)
+    if includeParent then
+        list[#list + 1] = {
+            key = parentName,
+            label = parentEntry.displayName or parentName,
+            isRoot = true,
+        }
+    end
     for _, c in ipairs(children) do list[#list + 1] = c end
     return list
 end
@@ -280,6 +305,14 @@ local function SelectSubcategory(key)
     local entry = optionsTables[key]
     if not entry then return end
     O.ClearChildren(window.content)
+
+    -- A customRender function takes full control of the content panel.
+    -- Used by the User Manual to render its own tree-based layout.
+    if type(entry.customRender) == "function" then
+        entry.customRender(window.content)
+        return
+    end
+
     local tbl = entry.func
     if type(tbl) == "function" then tbl = tbl() end
     if tbl then
@@ -588,6 +621,10 @@ function BazCore:RefreshOptions(addonName)
         local entry = optionsTables[addonName]
         if not entry then return end
         O.ClearChildren(window.content)
+        if type(entry.customRender) == "function" then
+            entry.customRender(window.content)
+            return
+        end
         local tbl = entry.func
         if type(tbl) == "function" then tbl = tbl() end
         if tbl then

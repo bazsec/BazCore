@@ -61,6 +61,18 @@ function O.RenderWidgets(parent, args, contentWidth, forceColumns, startY)
         return yOffset
     end
 
+    -- Block types that should always span the full content width in
+    -- two-column mode (never side-by-side). Includes legacy header/
+    -- description plus the new content block types from ContentFactories.
+    local FULL_WIDTH_TYPES = {
+        header = true, description = true,
+        h1 = true, h2 = true, h3 = true, h4 = true,
+        paragraph = true, lead = true, caption = true, quote = true,
+        list = true, image = true, note = true, code = true,
+        divider = true, spacer = true, table = true,
+        collapsible = true,
+    }
+
     -- Two-column bordered panel mode
     -- First pass: separate into sections split by full-width items
     local sections = {}
@@ -70,8 +82,8 @@ function O.RenderWidgets(parent, args, contentWidth, forceColumns, startY)
 
     for _, opt in ipairs(sorted) do
         if opt.type ~= "group" then
-            local fullWidth = (opt.type == "header" or opt.type == "description"
-                or (opt.type == "execute" and opt.width ~= "half"))
+            local fullWidth = FULL_WIDTH_TYPES[opt.type]
+                or (opt.type == "execute" and opt.width ~= "half")
             if fullWidth then
                 if #currentLeft > 0 or #currentRight > 0 then
                     table.insert(sections, { type = "pair", left = currentLeft, right = currentRight })
