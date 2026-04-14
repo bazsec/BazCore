@@ -32,6 +32,12 @@ Compartment.lua
 Keybinds.lua
 EditMode.lua
 Serialization.lua
+Options\Constants.lua
+Options\WidgetFactories.lua
+Options\LayoutEngine.lua
+Options\ListDetail.lua
+Options\PageBuilders.lua
+Options\Registration.lua
 OptionsPanel.lua
 AddonListButton.lua
 IconPicker.lua
