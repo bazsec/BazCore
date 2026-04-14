@@ -715,11 +715,13 @@ local function CreateTwoPanelLayout(container, optionsTable)
 
     -- Two-panel groups
     for _, groupOpt in ipairs(groupArgs) do
-        -- Section header
-        local hdr, hh = CreateHeaderWidget(container, groupOpt, contentWidth - PAD * 2)
-        hdr:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
-        hdr:Show()
-        yOffset = yOffset - hh - 4
+        -- Section header (skip if name is empty to avoid duplicate titles)
+        if groupOpt.name and groupOpt.name ~= "" then
+            local hdr, hh = CreateHeaderWidget(container, groupOpt, contentWidth - PAD * 2)
+            hdr:SetPoint("TOPLEFT", container, "TOPLEFT", PAD, yOffset)
+            hdr:Show()
+            yOffset = yOffset - hh - 4
+        end
 
         -- Split frame - anchors to bottom of container to fill space
         local splitFrame = CreateFrame("Frame", nil, container)
@@ -1338,7 +1340,7 @@ function BazCore:CreateModulesPage(addonName, config)
     end
 
     return {
-        name = "Modules",
+        name = config.title or "Modules",
         type = "group",
         args = args,
     }

@@ -132,7 +132,13 @@ function BazCore:HideGlow(btn)
     local glow = activeGlows[btn]
     if not glow then return end
     StopAnimations(glow)
-    glow:Hide()
+    UIFrameFade(glow, {
+        mode = "OUT",
+        timeToFade = 0.3,
+        startAlpha = glow:GetAlpha(),
+        endAlpha = 0,
+        finishedFunc = function() glow:Hide(); glow:SetAlpha(1) end,
+    })
 end
 
 function BazCore:HasGlow(btn)

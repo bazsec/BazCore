@@ -34,4 +34,5 @@ EditMode.lua
 Serialization.lua
 OptionsPanel.lua
 AddonListButton.lua
+IconPicker.lua
 DockableWidget.lua
