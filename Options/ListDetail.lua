@@ -23,11 +23,17 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     splitFrame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -O.PAD, O.PAD)
     splitFrame:Show()
 
+    -- List width = ~22% of the container width (clamped to reasonable bounds)
+    local containerW = container:GetWidth() or contentWidth or 600
+    local listW = math.floor(containerW * 0.22)
+    if listW < 180 then listW = 180 end
+    if listW > 320 then listW = 320 end
+
     -- Left: list panel
     local listBg = CreateFrame("Frame", nil, splitFrame, "BackdropTemplate")
     listBg:SetPoint("TOPLEFT", 0, 0)
     listBg:SetPoint("BOTTOMLEFT", 0, 0)
-    listBg:SetWidth(O.LIST_WIDTH)
+    listBg:SetWidth(listW)
     listBg:SetBackdrop(O.LIST_BACKDROP)
     listBg:SetBackdropColor(unpack(O.LIST_BG))
     listBg:SetBackdropBorderColor(unpack(O.PANEL_BORDER))
@@ -36,7 +42,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     local listTopY = -6
     for _, execOpt in ipairs(executeArgs or {}) do
         local execBtn = CreateFrame("Button", nil, listBg, "UIPanelButtonTemplate")
-        execBtn:SetSize(O.LIST_WIDTH - 12, 24)
+        execBtn:SetSize(listW - 12, 24)
         execBtn:SetPoint("TOPLEFT", listBg, "TOPLEFT", 6, listTopY)
         execBtn:SetText(execOpt.name or "")
         execBtn:SetScript("OnClick", function()
@@ -60,8 +66,9 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     ScrollUtil.InitScrollFrameWithScrollBar(listScroll, listScrollBar)
 
     local listContent = CreateFrame("Frame", nil, listScroll)
-    listContent:SetWidth(O.LIST_WIDTH - 26)
+    listContent:SetWidth(listW - 26)
     listScroll:SetScrollChild(listContent)
+    O.AutoHideScrollbar(listScroll, listScrollBar)
 
     -- Right: detail panel
     local detailFrame = CreateFrame("Frame", nil, splitFrame, "BackdropTemplate")
@@ -80,6 +87,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     detailScrollBar:SetPoint("TOPLEFT", detailScroll, "TOPRIGHT", 2, 0)
     detailScrollBar:SetPoint("BOTTOMLEFT", detailScroll, "BOTTOMRIGHT", 2, 0)
     ScrollUtil.InitScrollFrameWithScrollBar(detailScroll, detailScrollBar)
+    O.AutoHideScrollbar(detailScroll, detailScrollBar)
 
     local detailContent = CreateFrame("Frame", nil, detailScroll)
     detailContent:SetWidth(detailFrame:GetWidth() - 28)
@@ -131,7 +139,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     local listY = 0
     for i, child in ipairs(childGroups) do
         local itemBtn = CreateFrame("Button", nil, listContent)
-        itemBtn:SetSize(O.LIST_WIDTH - 26, O.LIST_ITEM_HEIGHT)
+        itemBtn:SetSize(listW - 26, O.LIST_ITEM_HEIGHT)
         itemBtn:SetPoint("TOPLEFT", 0, -listY)
 
         local bg = itemBtn:CreateTexture(nil, "BACKGROUND")

@@ -110,3 +110,29 @@ function O.HasChildGroups(args)
     end
     return false
 end
+
+-- Auto-hide a scroll bar when the content fits without scrolling.
+-- Hooks OnValueChanged on the scroll frame so visibility updates live.
+function O.AutoHideScrollbar(scrollFrame, scrollBar)
+    if not scrollFrame or not scrollBar then return end
+
+    local function Update()
+        local child = scrollFrame:GetScrollChild()
+        if not child then
+            scrollBar:Hide()
+            return
+        end
+        local contentH = child:GetHeight() or 0
+        local frameH = scrollFrame:GetHeight() or 0
+        if contentH > frameH + 1 then
+            scrollBar:Show()
+        else
+            scrollBar:Hide()
+        end
+    end
+
+    scrollFrame:HookScript("OnSizeChanged", Update)
+    -- Poll briefly after creation so content has settled
+    C_Timer.After(0, Update)
+    C_Timer.After(0.1, Update)
+end
