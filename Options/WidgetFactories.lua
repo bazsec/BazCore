@@ -183,12 +183,28 @@ end
 local function CreateExecuteWidget(parent, opt, contentWidth)
     local frame = CreateFrame("Frame", nil, parent)
     local isHalf = (opt.width == "half")
+    local borderless = opt.borderless
     frame:SetSize(contentWidth, O.WIDGET_HEIGHT + 4)
     local btnWidth = isHalf and contentWidth or math.min(260, contentWidth)
-    local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    -- Use if/else; the `and/or` ternary breaks when the true value is nil
+    local template
+    if borderless then
+        template = nil
+    else
+        template = "UIPanelButtonTemplate"
+    end
+    local btn = CreateFrame("Button", nil, frame, template)
     btn:SetPoint("LEFT", 0, 0)
     btn:SetSize(btnWidth, O.WIDGET_HEIGHT)
-    btn:SetText(opt.name or "Execute")
+    if borderless then
+        -- Static display: just a centered label, no hover, not clickable
+        btn:EnableMouse(false)
+        btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        btn.label:SetPoint("CENTER")
+        btn.label:SetText(opt.name or "")
+    else
+        btn:SetText(opt.name or "Execute")
+    end
 
     btn:SetScript("OnClick", function()
         if opt.confirm then
