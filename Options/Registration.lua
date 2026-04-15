@@ -268,34 +268,46 @@ local function RenderIntoCanvas(container, optionsTable)
         scroll:SetScrollChild(content)
         container._renderTarget = content
 
-        -- Render at the current best-known width, then re-render once
-        -- the scroll frame's actual size resolves. This fixes the bug
-        -- where some pages came up blank on first navigation because
-        -- the container hadn't been laid out yet — widgets were sized
-        -- to a stale/wrong width.
         local function Layout(width)
+            if not width or width <= 0 then return end
             content:SetWidth(width)
             O.ClearChildren(content)
             CreateTwoPanelLayout(content, optionsTable)
+            -- Track on the SCROLL (per-render fresh frame), not on the
+            -- container (shared across renders). Avoids stale guard
+            -- preventing legitimate re-layouts on next navigation.
+            scroll._lastRenderedWidth = width
         end
 
         local function ResolveWidth()
             local w = scroll:GetWidth() or 0
             if w <= 0 then w = (container:GetWidth() or 0) - 18 end
-            if w <= 0 then w = 600 end
             return w
         end
 
-        Layout(ResolveWidth())
+        -- First attempt at the current best-known width
+        local initialW = ResolveWidth()
+        if initialW > 0 then Layout(initialW) end
 
+        -- Defensive: defer one frame so the layout system has had a
+        -- chance to size everything. Re-layout if the resolved width
+        -- now differs from what we initially used (or we hadn't laid
+        -- out at all yet because width was 0).
+        C_Timer.After(0, function()
+            if not content:GetParent() then return end  -- destroyed
+            local w = ResolveWidth()
+            if w > 0 and (not scroll._lastRenderedWidth
+                          or math.abs(w - scroll._lastRenderedWidth) > 1) then
+                Layout(w)
+            end
+        end)
+
+        -- Long-term: any future size change re-flows the content
         scroll:SetScript("OnSizeChanged", function(self, w)
             if not w or w <= 0 then return end
             content:SetWidth(w)
-            -- Re-layout only when the resolved width differs meaningfully
-            -- from what we last rendered at (avoid pointless re-renders).
-            if not container._lastRenderedWidth
-               or math.abs(w - container._lastRenderedWidth) > 1 then
-                container._lastRenderedWidth = w
+            if not scroll._lastRenderedWidth
+               or math.abs(w - scroll._lastRenderedWidth) > 1 then
                 Layout(w)
             end
         end)
