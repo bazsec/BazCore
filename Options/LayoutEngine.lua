@@ -119,7 +119,11 @@ function O.RenderWidgets(parent, args, contentWidth, forceColumns, startY)
             end
             local factory = O.widgetFactories[section.opt.type]
             if factory then
-                local widget, h = factory(parent, section.opt, contentWidth)
+                -- Use availableWidth (contentWidth - O.PAD * 2) so the
+                -- widget's right edge lines up with the bordered panels
+                -- below it. Passing contentWidth made notes/headers
+                -- extend ~2*PAD past the panel edge.
+                local widget, h = factory(parent, section.opt, availableWidth)
                 widget:SetPoint("TOPLEFT", parent, "TOPLEFT", O.PAD, yOffset)
                 widget:Show()
                 yOffset = yOffset - h - 2

@@ -266,15 +266,39 @@ local function RenderIntoCanvas(container, optionsTable)
 
         local content = CreateFrame("Frame", nil, scroll)
         scroll:SetScrollChild(content)
-        scroll:SetScript("OnSizeChanged", function(self, w)
-            content:SetWidth(w)
-        end)
-
         container._renderTarget = content
-        local knownWidth = container:GetWidth() - 18
-        if knownWidth <= 0 then knownWidth = 600 end
-        content:SetWidth(knownWidth)
-        CreateTwoPanelLayout(content, optionsTable)
+
+        -- Render at the current best-known width, then re-render once
+        -- the scroll frame's actual size resolves. This fixes the bug
+        -- where some pages came up blank on first navigation because
+        -- the container hadn't been laid out yet — widgets were sized
+        -- to a stale/wrong width.
+        local function Layout(width)
+            content:SetWidth(width)
+            O.ClearChildren(content)
+            CreateTwoPanelLayout(content, optionsTable)
+        end
+
+        local function ResolveWidth()
+            local w = scroll:GetWidth() or 0
+            if w <= 0 then w = (container:GetWidth() or 0) - 18 end
+            if w <= 0 then w = 600 end
+            return w
+        end
+
+        Layout(ResolveWidth())
+
+        scroll:SetScript("OnSizeChanged", function(self, w)
+            if not w or w <= 0 then return end
+            content:SetWidth(w)
+            -- Re-layout only when the resolved width differs meaningfully
+            -- from what we last rendered at (avoid pointless re-renders).
+            if not container._lastRenderedWidth
+               or math.abs(w - container._lastRenderedWidth) > 1 then
+                container._lastRenderedWidth = w
+                Layout(w)
+            end
+        end)
     end
 end
 
