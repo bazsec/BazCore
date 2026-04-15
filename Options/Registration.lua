@@ -249,8 +249,33 @@ local function RenderIntoCanvas(container, optionsTable)
             container._renderTarget = CreateFrame("Frame", nil, container)
             container._renderTarget:SetAllPoints()
         end
-        O.ClearChildren(container._renderTarget)
-        CreateTwoPanelLayout(container._renderTarget, optionsTable)
+        local renderTarget = container._renderTarget
+
+        local function Layout()
+            O.ClearChildren(renderTarget)
+            CreateTwoPanelLayout(renderTarget, optionsTable)
+            renderTarget._lastRenderedWidth = renderTarget:GetWidth() or 0
+        end
+
+        Layout()
+
+        -- Deferred retry: if the container width hadn't resolved when
+        -- we first rendered, re-layout once the layout engine settles.
+        C_Timer.After(0, function()
+            if not renderTarget:GetParent() then return end
+            local w = renderTarget:GetWidth() or 0
+            if w > 0 and math.abs(w - (renderTarget._lastRenderedWidth or 0)) > 1 then
+                Layout()
+            end
+        end)
+
+        -- Long-term safety: any future resize re-flows the content
+        renderTarget:SetScript("OnSizeChanged", function(self, w)
+            if not w or w <= 0 then return end
+            if math.abs(w - (renderTarget._lastRenderedWidth or 0)) > 1 then
+                Layout()
+            end
+        end)
     else
         local scroll = CreateFrame("ScrollFrame", nil, container)
         scroll:SetPoint("TOPLEFT", 0, 0)
