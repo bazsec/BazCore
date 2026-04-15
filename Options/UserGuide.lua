@@ -519,7 +519,7 @@ function BazCore:RegisterUserGuide(addonName, guide)
         RenderGuide(container, addonName)
     end
     BazCore._optionsTables[key] = entry
-    BazCore:AddToSettings(key, "User Guide", addonName)
+    BazCore:AddToSettings(key, "User Manual", addonName)
 
     if BazCore.RefreshOptions then
         BazCore:RefreshOptions(key)

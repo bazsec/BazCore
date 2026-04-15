@@ -241,7 +241,7 @@ BazCore:QueueForLogin(function()
             },
         }
     end)
-    BazCore:AddToSettings("BazCore-Settings", "Settings", "BazCore")
+    BazCore:AddToSettings("BazCore-Settings", "General Settings", "BazCore")
 
     -- Profiles subcategory (unified for all Baz Suite addons)
     if BazCore.GetProfileOptionsTable then

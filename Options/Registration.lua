@@ -63,17 +63,28 @@ local function GetSubcategoriesFor(parentName)
         end
     end
     -- Sort order:
-    --   1. "Settings" first       (the most common landing spot)
-    --   2. Other sub-categories   (alphabetical)
-    --   3. "User Guide"           (docs near the bottom)
-    --   4. "Profiles" last        (least frequently used)
+    --   1. "User Manual"      (docs up top so new users find them first)
+    --   2. "General Settings" (main settings page)
+    --   3. "Global Settings"  (overrides that apply to every module)
+    --   4. Custom sub-categories (alphabetical)
+    --   5. "Profiles" last
+    -- Old labels ("User Guide", "Settings", "Global Options") still
+    -- resolve to the same slot so addons that haven't been renamed
+    -- don't break their ordering.
+    local function Rank(label)
+        if label == "User Manual" or label == "User Guide"
+            then return 1 end
+        if label == "General Settings" or label == "Settings"
+            then return 2 end
+        if label == "Global Settings" or label == "Global Options"
+            then return 3 end
+        if label == "Profiles"
+            then return 999 end
+        return 500  -- custom sub-categories, sorted alphabetically among themselves
+    end
     table.sort(children, function(a, b)
-        if a.label == "Settings" then return true end
-        if b.label == "Settings" then return false end
-        if a.label == "Profiles" then return false end
-        if b.label == "Profiles" then return true end
-        if a.label == "User Guide" then return false end
-        if b.label == "User Guide" then return true end
+        local ra, rb = Rank(a.label), Rank(b.label)
+        if ra ~= rb then return ra < rb end
         return a.label < b.label
     end)
 
