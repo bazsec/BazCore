@@ -80,24 +80,20 @@ function BazCore:InitProfiles()
         sv.profiles[DEFAULT_PROFILE] = {}
     end
 
-    -- Auto-create per-character profile on first login
+    -- Default-profile pointer: which profile should brand-new characters
+    -- inherit? Falls back to the built-in "Default" if not set, or if
+    -- the pointed-to profile no longer exists.
+    if sv.defaultProfile and not sv.profiles[sv.defaultProfile] then
+        sv.defaultProfile = nil
+    end
+    local defaultName = sv.defaultProfile or DEFAULT_PROFILE
+
+    -- New character on first login: assign directly to the default profile
+    -- (no per-character copy). Changes to the default propagate to every
+    -- character using it, which is what users expect from a "default."
     local charKey = GetCharacterKey()
     if charKey ~= "Unknown" and not sv.assignments[charKey] then
-        local charProfile = charKey
-        if not sv.profiles[charProfile] then
-            -- Copy from Default so new characters start with defaults
-            sv.profiles[charProfile] = {}
-            if sv.profiles[DEFAULT_PROFILE] then
-                for k, v in pairs(sv.profiles[DEFAULT_PROFILE]) do
-                    if type(v) == "table" then
-                        sv.profiles[charProfile][k] = CopyTable(v)
-                    else
-                        sv.profiles[charProfile][k] = v
-                    end
-                end
-            end
-        end
-        sv.assignments[charKey] = charProfile
+        sv.assignments[charKey] = defaultName
     end
 
     -- Resolve which profile this character should use
@@ -217,6 +213,36 @@ function BazCore:GetActiveProfile()
     return sv and sv.activeProfile or DEFAULT_PROFILE
 end
 
+---------------------------------------------------------------------------
+-- Default-Profile Pointer
+-- The "default" profile is the one new characters auto-attach to on
+-- their first login. Any profile can be promoted to default; the
+-- built-in "Default" is the fallback.
+---------------------------------------------------------------------------
+
+function BazCore:GetDefaultProfile()
+    local sv = BazCoreDB
+    return (sv and sv.defaultProfile) or DEFAULT_PROFILE
+end
+
+function BazCore:SetDefaultProfile(profileName)
+    local sv = BazCoreDB
+    if not sv or not sv.profiles or not sv.profiles[profileName] then
+        return false
+    end
+    sv.defaultProfile = profileName
+    BazCore:Fire("BAZ_DEFAULT_PROFILE_CHANGED", profileName)
+    return true
+end
+
+function BazCore:ClearDefaultProfile()
+    local sv = BazCoreDB
+    if not sv then return false end
+    sv.defaultProfile = nil
+    BazCore:Fire("BAZ_DEFAULT_PROFILE_CHANGED", DEFAULT_PROFILE)
+    return true
+end
+
 function BazCore:SetActiveProfile(profileName)
     local sv = BazCoreDB
     if not sv or not sv.profiles[profileName] then return false end
@@ -304,6 +330,11 @@ function BazCore:DeleteProfile(profileName)
         end
     end
 
+    -- If the default-profile pointer was on this one, fall back to "Default"
+    if sv.defaultProfile == profileName then
+        sv.defaultProfile = nil
+    end
+
     BazCore:Fire("BAZ_PROFILE_DELETED", profileName)
     return true
 end
@@ -330,6 +361,11 @@ function BazCore:RenameProfile(oldName, newName)
                 sv.assignments[scope] = newName
             end
         end
+    end
+
+    -- Move the default-profile pointer if it was on the renamed profile
+    if sv.defaultProfile == oldName then
+        sv.defaultProfile = newName
     end
 
     BazCore:Fire("BAZ_PROFILE_RENAMED", oldName, newName)
@@ -482,13 +518,18 @@ function BazCore:GetProfileOptionsTable()
         local profileGroups = {}
 
         for i, profileName in ipairs(profileList) do
-            local isActive = (profileName == BazCore:GetActiveProfile())
-            local isDefault = (profileName == DEFAULT_PROFILE)
+            local isActive    = (profileName == BazCore:GetActiveProfile())
+            local isBuiltin   = (profileName == DEFAULT_PROFILE)
+            local isDefault   = (profileName == BazCore:GetDefaultProfile())
+
+            local nameLabel = profileName
+            if isActive  then nameLabel = nameLabel .. " |cff00ff00(active)|r"  end
+            if isBuiltin then nameLabel = nameLabel .. " |cffffd700(default)|r" end
 
             profileGroups["profile_" .. i] = {
                 order = i,
                 type = "group",
-                name = profileName .. (isActive and " |cff00ff00(active)|r" or ""),
+                name = nameLabel,
                 args = {
                     statusHeader = {
                         order = 1,
@@ -498,11 +539,11 @@ function BazCore:GetProfileOptionsTable()
                     rename = {
                         order = 1.5,
                         type = "input",
-                        name = isDefault and "Profile Name (cannot rename Default)" or "Profile Name",
-                        desc = isDefault and "" or "Type a new name and press Enter to rename",
+                        name = isBuiltin and "Profile Name (cannot rename Default)" or "Profile Name",
+                        desc = isBuiltin and "" or "Type a new name and press Enter to rename",
                         get = function() return profileName end,
                         set = function(_, val)
-                            if isDefault then
+                            if isBuiltin then
                                 BazCore:Print("Cannot rename the Default profile.")
                                 return
                             end
@@ -526,6 +567,24 @@ function BazCore:GetProfileOptionsTable()
                                 BazCore:SetActiveProfile(profileName)
                                 BazCore:Print("Switched to profile: " .. profileName)
                                 RefreshProfilesPanel()
+                            end
+                        end,
+                    },
+                    setDefault = {
+                        order = 3,
+                        type = "execute",
+                        name = isDefault and "|cffffd700Default for New Characters|r" or "Set as Default for New Characters",
+                        desc = isDefault
+                            and "New characters automatically attach to this profile."
+                            or "Make this the profile new characters automatically use on first login. Existing characters are not affected.",
+                        func = function()
+                            if isDefault then
+                                BazCore:Print("'" .. profileName .. "' is already the default for new characters.")
+                            else
+                                if BazCore:SetDefaultProfile(profileName) then
+                                    BazCore:Print("'" .. profileName .. "' set as the default for new characters.")
+                                    RefreshProfilesPanel()
+                                end
                             end
                         end,
                     },
@@ -578,11 +637,11 @@ function BazCore:GetProfileOptionsTable()
                         order = 20,
                         type = "execute",
                         name = "|cffff4444Delete This Profile|r",
-                        desc = isDefault and "Cannot delete Default profile" or (isActive and "Cannot delete the active profile" or "Permanently delete this profile"),
-                        confirm = not (isDefault or isActive),
+                        desc = isBuiltin and "Cannot delete Default profile" or (isActive and "Cannot delete the active profile" or "Permanently delete this profile"),
+                        confirm = not (isBuiltin or isActive),
                         confirmText = "Delete profile '" .. profileName .. "'? This cannot be undone.",
                         func = function()
-                            if isDefault then
+                            if isBuiltin then
                                 BazCore:Print("Cannot delete the Default profile.")
                             elseif isActive then
                                 BazCore:Print("Cannot delete the active profile. Switch first.")
@@ -640,17 +699,26 @@ function BazCore:GetProfileOptionsTable()
         return profileGroups
     end
 
+    local activeProfile  = BazCore:GetActiveProfile()
+    local defaultProfile = BazCore:GetDefaultProfile()
+
     return {
         name = "Profiles",
         subtitle = "Baz Suite profile management",
         type = "group",
         args = {
-            desc = {
-                order = 1,
-                type = "description",
-                name = "Profiles control settings for all Baz Suite addons at once. " ..
-                    "Switching profiles changes every addon's configuration together.",
-                fontSize = "small",
+            intro = {
+                order = 0.1,
+                type = "lead",
+                text = "Profiles control settings for all Baz Suite addons at once. Switching profiles changes every addon's configuration together.",
+            },
+            statusNote = {
+                order = 0.2,
+                type = "note",
+                style = "info",
+                text = "Active profile: |cff00ff00" .. activeProfile .. "|r" ..
+                       "    \194\183    Default for new characters: |cffffd700" .. defaultProfile .. "|r" ..
+                       "\n\nNew characters auto-attach to the default profile on first login. Mark any profile as default with the |cffffd700Set as Default|r button on its page.",
             },
             newProfile = {
                 order = 2,

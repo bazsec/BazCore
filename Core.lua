@@ -324,3 +324,67 @@ BazCore:QueueForLogin(function()
         icon = "Interface\\Icons\\INV_Gizmo_GoblingTonkController",
     })
 end)
+
+---------------------------------------------------------------------------
+-- BazCore's own slash commands
+-- /bazcore (or /bc) opens the options window. Sub-commands cover the most
+-- common day-to-day actions: profile switching and default-profile setup.
+---------------------------------------------------------------------------
+
+BazCore:QueueForLogin(function()
+    if not BazCore.RegisterCommands then return end
+
+    BazCore:RegisterCommands("BazCore", {
+        title = "BazCore",
+        slash = { "/bazcore", "/bc" },
+        defaultHandler = function()
+            if BazCore.OpenOptionsPanel then
+                BazCore:OpenOptionsPanel("BazCore")
+            end
+        end,
+        commands = {
+            profile = {
+                desc = "Show or switch the active profile",
+                handler = function(args)
+                    if not args or args == "" then
+                        BazCore:Print("Active profile: |cff00ff00" .. BazCore:GetActiveProfile() .. "|r")
+                        return
+                    end
+                    if BazCore:SetActiveProfile(args) then
+                        BazCore:Print("Switched to profile: |cff00ff00" .. args .. "|r")
+                    else
+                        BazCore:Print("|cffff4444No profile named '" .. args .. "'|r")
+                    end
+                end,
+            },
+            profiles = {
+                desc = "List all profiles",
+                handler = function()
+                    local active  = BazCore:GetActiveProfile()
+                    local default = BazCore:GetDefaultProfile()
+                    BazCore:Print("Profiles:")
+                    for _, name in ipairs(BazCore:ListProfiles()) do
+                        local tags = ""
+                        if name == active  then tags = tags .. " |cff00ff00(active)|r"  end
+                        if name == default then tags = tags .. " |cffffd700(default)|r" end
+                        print("  " .. name .. tags)
+                    end
+                end,
+            },
+            default = {
+                desc = "Set the profile new characters auto-attach to (or print the current default)",
+                handler = function(args)
+                    if not args or args == "" then
+                        BazCore:Print("Default profile for new characters: |cffffd700" .. BazCore:GetDefaultProfile() .. "|r")
+                        return
+                    end
+                    if BazCore:SetDefaultProfile(args) then
+                        BazCore:Print("'|cffffd700" .. args .. "|r' set as the default for new characters.")
+                    else
+                        BazCore:Print("|cffff4444No profile named '" .. args .. "'|r")
+                    end
+                end,
+            },
+        },
+    })
+end)
