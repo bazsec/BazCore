@@ -268,17 +268,31 @@ local function RenderIntoCanvas(container, optionsTable)
             renderTarget._lastRenderedWidth = renderTarget:GetWidth() or 0
         end
 
-        Layout()
-
-        -- Deferred retry: if the container width hadn't resolved when
-        -- we first rendered, re-layout once the layout engine settles.
-        C_Timer.After(0, function()
+        -- Wait for the layout engine to resolve the render target's
+        -- size before rendering. GetLeft() is nil until a frame has
+        -- been laid out. We *don't* render eagerly first — doing so
+        -- at a zero width has caused corrupted render state we can't
+        -- recover from. Single deferred render at known-good width is
+        -- the most reliable path we've found.
+        local attempts = 0
+        local function TryRender()
+            attempts = attempts + 1
             if not renderTarget:GetParent() then return end
-            local w = renderTarget:GetWidth() or 0
-            if w > 0 and math.abs(w - (renderTarget._lastRenderedWidth or 0)) > 1 then
+            if attempts > 20 then
+                -- Give up after ~1s and render anyway so the user
+                -- doesn't stare at a permanent blank screen.
                 Layout()
+                return
             end
-        end)
+            local laidOut = renderTarget:GetLeft() ~= nil
+            local w = renderTarget:GetWidth() or 0
+            if laidOut and w > 0 then
+                Layout()
+                return
+            end
+            C_Timer.After(0.05, TryRender)
+        end
+        C_Timer.After(0, TryRender)
 
         -- Long-term safety: any future resize re-flows the content
         renderTarget:SetScript("OnSizeChanged", function(self, w)
@@ -321,22 +335,26 @@ local function RenderIntoCanvas(container, optionsTable)
             return w
         end
 
-        -- First attempt at the current best-known width
-        local initialW = ResolveWidth()
-        if initialW > 0 then Layout(initialW) end
-
-        -- Defensive: defer one frame so the layout system has had a
-        -- chance to size everything. Re-layout if the resolved width
-        -- now differs from what we initially used (or we hadn't laid
-        -- out at all yet because width was 0).
-        C_Timer.After(0, function()
-            if not content:GetParent() then return end  -- destroyed
-            local w = ResolveWidth()
-            if w > 0 and (not scroll._lastRenderedWidth
-                          or math.abs(w - scroll._lastRenderedWidth) > 1) then
-                Layout(w)
+        -- Wait for the scroll frame to be laid out, then render once
+        -- at the resolved width. Avoid rendering eagerly at zero width
+        -- — it's been a consistent source of blank-page bugs.
+        local attempts = 0
+        local function TryRender()
+            attempts = attempts + 1
+            if not content:GetParent() then return end
+            if attempts > 20 then
+                Layout(ResolveWidth())  -- last-ditch
+                return
             end
-        end)
+            local laidOut = scroll:GetLeft() ~= nil
+            local w = ResolveWidth()
+            if laidOut and w > 0 then
+                Layout(w)
+                return
+            end
+            C_Timer.After(0.05, TryRender)
+        end
+        C_Timer.After(0, TryRender)
 
         -- Long-term: any future size change re-flows the content
         scroll:SetScript("OnSizeChanged", function(self, w)
