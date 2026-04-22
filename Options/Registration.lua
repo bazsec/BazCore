@@ -245,21 +245,29 @@ local function RenderIntoCanvas(container, optionsTable)
         end
     end
 
+    -- Always discard any previous render target and create a fresh
+    -- one. The SelectSubcategory helper clears window.content's
+    -- children (SetParent(nil)) before calling us, which leaves our
+    -- cached container._renderTarget / container._scrollFrame fields
+    -- pointing to orphaned frames. Reusing an orphaned frame is the
+    -- blank-page bug: GetParent() returns nil, GetLeft() stays nil,
+    -- and our polling TryRender exits on the parent check — so
+    -- Layout() never runs. Starting fresh every render is cheap
+    -- (just a Frame) and bypasses the problem entirely.
     if container._scrollFrame then
         container._scrollFrame:Hide()
         container._scrollFrame:SetParent(nil)
         container._scrollFrame = nil
-        container._renderTarget = nil
     end
     if container._renderTarget then
-        O.ClearChildren(container._renderTarget)
+        container._renderTarget:Hide()
+        container._renderTarget:SetParent(nil)
+        container._renderTarget = nil
     end
 
     if hasTwoPanelGroups then
-        if not container._renderTarget then
-            container._renderTarget = CreateFrame("Frame", nil, container)
-            container._renderTarget:SetAllPoints()
-        end
+        container._renderTarget = CreateFrame("Frame", nil, container)
+        container._renderTarget:SetAllPoints()
         local renderTarget = container._renderTarget
 
         local function Layout()
