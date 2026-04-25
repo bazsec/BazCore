@@ -171,23 +171,43 @@ local function RenderPageContent(parent, page, contentWidth)
     for _, b in ipairs(headerBlocks) do allBlocks[#allBlocks + 1] = b end
     for _, b in ipairs(PageToBlocks(page)) do allBlocks[#allBlocks + 1] = b end
 
-    -- Use absolute positioning so the parent height tracks the bottom of
-    -- the last block. This works because content pages are static; the
-    -- only animated change is inside collapsibles, which manage their
-    -- own internal height transitions.
-    local y = -O.PAD
+    -- Render each block, but keep a list so we can re-flow Y offsets
+    -- whenever a collapsible expands/collapses. Without this, blocks
+    -- below a collapsible are anchored at fixed Y values measured at
+    -- render time, so an opened collapsible overlaps its siblings and
+    -- the parent height stays too short for the scroll frame.
+    local items = {}
     local innerWidth = contentWidth - O.PAD * 2
     for _, block in ipairs(allBlocks) do
         local factory = O.widgetFactories[block.type]
         if factory then
             local widget, h = factory(parent, block, innerWidth)
-            widget:SetPoint("TOPLEFT", parent, "TOPLEFT", O.PAD, y)
             widget:Show()
-            y = y - h - O.SPACING
+            items[#items + 1] = { widget = widget, height = h }
         end
     end
 
-    parent:SetHeight(math.abs(y) + O.PAD)
+    local function Reflow()
+        local y = -O.PAD
+        for _, item in ipairs(items) do
+            item.widget:ClearAllPoints()
+            item.widget:SetPoint("TOPLEFT", parent, "TOPLEFT", O.PAD, y)
+            -- Read the widget's CURRENT height (collapsibles change
+            -- theirs as they animate; everything else stays static).
+            local h = item.widget:GetHeight() or item.height
+            y = y - h - O.SPACING
+        end
+        parent:SetHeight(math.abs(y) + O.PAD)
+    end
+
+    -- Hook each block's _onHeightChanged so any collapsible that grows
+    -- or shrinks triggers a full re-flow. Non-collapsible blocks never
+    -- fire the hook — assigning the field is harmless.
+    for _, item in ipairs(items) do
+        item.widget._onHeightChanged = Reflow
+    end
+
+    Reflow()
 end
 
 ---------------------------------------------------------------------------
