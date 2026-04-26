@@ -251,7 +251,13 @@ local function CreateSelectWidget(parent, opt, contentWidth)
 
     local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     btn:SetPoint("TOPLEFT", 0, -22)
-    btn:SetSize(math.min(200, contentWidth), 22)
+    btn:SetHeight(22)
+
+    -- Measuring FontString — same family as UIPanelButtonTemplate uses,
+    -- hidden so it doesn't render. We poke text into it just to read
+    -- back the rendered width without disturbing the button's label.
+    local probe = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    probe:Hide()
 
     local function GetValues()
         local v = opt.values
@@ -259,12 +265,34 @@ local function CreateSelectWidget(parent, opt, contentWidth)
         return v or {}
     end
 
+    -- Size the button to the WIDEST value text in the dropdown so the
+    -- label never overflows the button chrome (the previous fixed
+    -- 200 px cap clipped strings like "Sections (header + grid per
+    -- category)"). 24 px of padding accounts for the template's
+    -- internal margins on each side; clamped to contentWidth as the
+    -- absolute upper bound and 80 px as a sensible lower bound.
+    local MIN_W = 80
+    local PADDING = 24
+    local function ResizeToFitLongest()
+        local values = GetValues()
+        local maxW = MIN_W
+        for _, v in pairs(values) do
+            probe:SetText(v)
+            local w = probe:GetStringWidth() or 0
+            if w > maxW then maxW = w end
+        end
+        local final = math.min(maxW + PADDING, contentWidth)
+        btn:SetWidth(final)
+    end
+
     local function UpdateLabel()
         local val = opt.get and opt.get()
         local values = GetValues()
         btn:SetText(values[val] or val or "Select...")
     end
+
     UpdateLabel()
+    ResizeToFitLongest()
 
     btn:SetScript("OnClick", function(self)
         local values = GetValues()
@@ -280,6 +308,7 @@ local function CreateSelectWidget(parent, opt, contentWidth)
 
     frame:SetScript("OnShow", function()
         UpdateLabel()
+        ResizeToFitLongest()
         btn:SetEnabled(not O.IsDisabled(opt))
     end)
 
