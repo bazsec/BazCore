@@ -182,3 +182,25 @@ function BazCore:SafeFind(str, pattern, init, plain)
     if not s then return nil end
     return s:find(pattern, init, plain)
 end
+
+---------------------------------------------------------------------------
+-- Safe Number Utility
+-- Midnight (12.0) returns "secret number" values from APIs like
+-- GetUnitSpeed, certain aura/spell IDs, and protected combat values.
+-- Direct arithmetic on these throws when execution is tainted by the
+-- calling addon. Round-trip through "%d" formatting to launder.
+---------------------------------------------------------------------------
+
+function BazCore:SafeNumber(num)
+    if num == nil then return nil end
+    -- Integer round-trip: "%d" formats reliably even when num is a
+    -- secret number; tonumber rebuilds a clean Lua number from the
+    -- resulting string. pcall guards against rare cases where the
+    -- value is a non-integer or otherwise rejects %d.
+    local ok, str = pcall(string.format, "%d", num)
+    if not ok then
+        ok, str = pcall(string.format, "%f", num)
+    end
+    if not ok or not str then return nil end
+    return tonumber(str)
+end
