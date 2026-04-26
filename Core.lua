@@ -166,7 +166,9 @@ BazCore:QueueForLogin(function()
                 "Object pooling, timers, animations, and string safety utilities.",
         })
 
-        -- Add dynamic Baz Suite versions and memory sections
+        -- Suite version list. The dedicated Memory Usage sub-page
+        -- (MemoryPage.lua) handles the live memory readout — this
+        -- landing page just orients the user with version info.
         local versionLines = {}
         local sorted = {}
         for name, config in pairs(BazCore.addons) do
@@ -181,29 +183,8 @@ BazCore:QueueForLogin(function()
             versionLines[#versionLines + 1] = "|cffffffff" .. info.name .. "|r v" .. ver
         end
 
-        UpdateAddOnMemoryUsage()
-        local totalMem = 0
-        local memLines = {}
-        local memAddons = { "BazCore" }
-        for name in pairs(BazCore.addons) do
-            memAddons[#memAddons + 1] = name
-        end
-        table.sort(memAddons)
-        for _, name in ipairs(memAddons) do
-            local mem = GetAddOnMemoryUsage(name)
-            if mem and mem > 0 then
-                totalMem = totalMem + mem
-                local display = C_AddOns.GetAddOnMetadata(name, "Title") or name
-                memLines[#memLines + 1] = string.format("|cffffffff%s|r — %.0f KB", display, mem)
-            end
-        end
-        memLines[#memLines + 1] = string.format("|cff3399ffTotal|r — %.0f KB", totalMem)
-
         landing.args.suiteHeader = { order = 30, type = "header", name = "Baz Suite" }
         landing.args.versionList = { order = 31, type = "description", name = "|cff3399ffBazCore|r v" .. BazCore.VERSION .. "\n" .. table.concat(versionLines, "\n") }
-        landing.args.memHeader = { order = 40, type = "header", name = "Memory Usage" }
-        landing.args.memList = { order = 41, type = "description", name = table.concat(memLines, "\n") }
-        landing.args.memRefresh = { order = 42, type = "execute", name = "Refresh Memory", func = function() BazCore:RefreshOptions("BazCore") end }
 
         return landing
     end)
