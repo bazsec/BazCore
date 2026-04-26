@@ -375,6 +375,17 @@ end
 --       savedKey       = "position",         -- setting key on that addon
 --       uiSpecialFrame = true,               -- register for ESC close
 --       strata         = "MEDIUM",           -- optional, defaults MEDIUM
+--
+--       -- Optional portrait interactivity. Setting either of these
+--       -- enables a click-overlay sized to the portrait circle:
+--       portraitTooltip = {
+--           title = "Foo",
+--           lines = {                         -- one per row
+--               "|cffffd700Right-click|r to change bags",
+--               "|cffffd700Drag|r to move",
+--           },
+--       },
+--       portraitOnClick = function(self, button) ... end,
 --   })
 --
 -- Returns the Frame ready to populate.
@@ -435,6 +446,41 @@ function BazCore:CreatePortraitWindow(globalName, opts)
     -- ESC closes via Blizzard's UISpecialFrames mechanism.
     if opts.uiSpecialFrame and globalName then
         tinsert(UISpecialFrames, globalName)
+    end
+
+    -- Portrait interactivity — adds a click overlay on top of the
+    -- circular portrait so the consumer can hook clicks (typically
+    -- right-click → menu/popup) and a tooltip on hover. Only creates
+    -- the overlay when one of the two opts is set.
+    if (opts.portraitTooltip or opts.portraitOnClick)
+       and f.PortraitContainer and f.PortraitContainer.portrait then
+        local hit = CreateFrame("Button", nil, f.PortraitContainer)
+        hit:SetAllPoints(f.PortraitContainer.portrait)
+        hit:SetFrameLevel((f.PortraitContainer:GetFrameLevel() or 400) + 1)
+        hit:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+        if opts.portraitOnClick then
+            hit:SetScript("OnClick", opts.portraitOnClick)
+        end
+
+        local tt = opts.portraitTooltip
+        if tt then
+            hit:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                if tt.title and tt.title ~= "" then
+                    GameTooltip:SetText(tt.title)
+                end
+                if tt.lines then
+                    for _, line in ipairs(tt.lines) do
+                        GameTooltip:AddLine(line, 1, 1, 1, true)
+                    end
+                end
+                GameTooltip:Show()
+            end)
+            hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+
+        f.PortraitClick = hit  -- expose for consumers who want to extend
     end
 
     return f
