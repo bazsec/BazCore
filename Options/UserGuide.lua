@@ -34,11 +34,10 @@ local O = BazCore._Options
 local guides = {}      -- [addonName] = guide table
 local guideState = {}  -- [addonName] = { expanded = {[key]=true}, selectedKey = "1" }
 
-local TREE_ROW_H   = 26
-local PAGE_LIST_PCT = 0.28   -- inner list width as % of content panel
-local PAGE_LIST_MIN = 200
-local PAGE_LIST_MAX = 320
-local PAGE_LIST_GAP = 14
+local TREE_ROW_H = 26
+-- List width / gap constants live in Options/Constants.lua so the
+-- standard list/detail panel and the User Manual tree resolve to
+-- identical dimensions.
 
 ---------------------------------------------------------------------------
 -- Tree helpers
@@ -81,52 +80,16 @@ local function FindPageByKey(pages, key)
 end
 
 ---------------------------------------------------------------------------
--- Title bar (mirrors CreateTwoPanelLayout's header)
+-- Title bar (delegates to O.BuildTitleBar so the User Manual + the
+-- standard list/detail page render identical headers).
 ---------------------------------------------------------------------------
 
 local function BuildTitleBar(parent, addonName, guide, contentWidth)
-    local frame = CreateFrame("Frame", nil, parent)
-    local headerHeight = 44
-    local titleXOffset = O.PAD
-
-    local addonConfig = BazCore.addons and BazCore.addons[addonName]
-    local iconTex = addonConfig and addonConfig.minimap and addonConfig.minimap.icon
-    if not iconTex and C_AddOns and C_AddOns.GetAddOnMetadata then
-        iconTex = C_AddOns.GetAddOnMetadata(addonName, "IconTexture")
-    end
-    if iconTex then
-        local addonIcon = frame:CreateTexture(nil, "ARTWORK")
-        addonIcon:SetSize(32, 32)
-        addonIcon:SetPoint("TOPLEFT", O.PAD, -6)
-        addonIcon:SetTexture(iconTex)
-        titleXOffset = O.PAD + 40
-    end
-
-    local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    titleText:SetPoint("TOPLEFT", titleXOffset, -6)
-    titleText:SetText(guide.title or addonName)
-    titleText:SetTextColor(unpack(O.GOLD))
-
-    local addonVersion = addonConfig and addonConfig.version
-    if not addonVersion and C_AddOns and C_AddOns.GetAddOnMetadata then
-        addonVersion = C_AddOns.GetAddOnMetadata(addonName, "Version")
-    end
-    if addonVersion then
-        local versionText = frame:CreateFontString(nil, "OVERLAY", O.SMALL_FONT)
-        versionText:SetPoint("TOPLEFT", titleText, "BOTTOMLEFT", 0, -2)
-        versionText:SetText("v" .. addonVersion)
-        versionText:SetTextColor(unpack(O.DIM))
-        headerHeight = headerHeight + 6
-    end
-
-    local titleLine = frame:CreateTexture(nil, "ARTWORK")
-    titleLine:SetHeight(1)
-    titleLine:SetPoint("BOTTOMLEFT", O.PAD, 0)
-    titleLine:SetPoint("BOTTOMRIGHT", -O.PAD, 0)
-    titleLine:SetColorTexture(unpack(O.HEADER_LINE))
-
-    frame:SetSize(contentWidth, headerHeight)
-    return frame, headerHeight
+    return O.BuildTitleBar(parent, {
+        title        = guide.title or addonName,
+        addonName    = addonName,
+        contentWidth = contentWidth,
+    })
 end
 
 ---------------------------------------------------------------------------
@@ -220,69 +183,12 @@ local function RebuildTree(listContent, addonName, guide, listW, onSelect)
     local nodes = FlattenVisibleNodes(guide.pages, state.expanded, 0)
 
     local rowWidth = listW - 26
-    local halfW = math.floor(rowWidth / 2)
-
-    -- Helper: build the Blizzard-style gold-gradient selection highlight.
-    -- Two horizontal halves fade-in/out to the center, plus two thin gold
-    -- lines top and bottom that also fade at the edges. Returns a list of
-    -- textures so the caller can show/hide them as a group.
-    local function BuildSelectionHighlight(row)
-        local bandL = row:CreateTexture(nil, "BACKGROUND")
-        bandL:SetColorTexture(1, 1, 1, 1)
-        bandL:SetSize(halfW, TREE_ROW_H)
-        bandL:SetPoint("LEFT", 0, 0)
-        bandL:SetGradient("HORIZONTAL",
-            CreateColor(1, 0.82, 0, 0),
-            CreateColor(1, 0.82, 0, 0.45))
-
-        local bandR = row:CreateTexture(nil, "BACKGROUND")
-        bandR:SetColorTexture(1, 1, 1, 1)
-        bandR:SetSize(halfW, TREE_ROW_H)
-        bandR:SetPoint("RIGHT", 0, 0)
-        bandR:SetGradient("HORIZONTAL",
-            CreateColor(1, 0.82, 0, 0.45),
-            CreateColor(1, 0.82, 0, 0))
-
-        local topL = row:CreateTexture(nil, "OVERLAY")
-        topL:SetColorTexture(1, 1, 1, 1)
-        topL:SetSize(halfW, 1)
-        topL:SetPoint("TOPLEFT")
-        topL:SetGradient("HORIZONTAL",
-            CreateColor(1, 0.82, 0, 0),
-            CreateColor(1, 0.82, 0, 0.85))
-
-        local topR = row:CreateTexture(nil, "OVERLAY")
-        topR:SetColorTexture(1, 1, 1, 1)
-        topR:SetSize(halfW, 1)
-        topR:SetPoint("TOPRIGHT")
-        topR:SetGradient("HORIZONTAL",
-            CreateColor(1, 0.82, 0, 0.85),
-            CreateColor(1, 0.82, 0, 0))
-
-        local botL = row:CreateTexture(nil, "OVERLAY")
-        botL:SetColorTexture(1, 1, 1, 1)
-        botL:SetSize(halfW, 1)
-        botL:SetPoint("BOTTOMLEFT")
-        botL:SetGradient("HORIZONTAL",
-            CreateColor(1, 0.82, 0, 0),
-            CreateColor(1, 0.82, 0, 0.85))
-
-        local botR = row:CreateTexture(nil, "OVERLAY")
-        botR:SetColorTexture(1, 1, 1, 1)
-        botR:SetSize(halfW, 1)
-        botR:SetPoint("BOTTOMRIGHT")
-        botR:SetGradient("HORIZONTAL",
-            CreateColor(1, 0.82, 0, 0.85),
-            CreateColor(1, 0.82, 0, 0))
-
-        return { bandL, bandR, topL, topR, botL, botR }
-    end
-
-    local function ShowGroup(group, show)
-        for _, t in ipairs(group) do
-            if show then t:Show() else t:Hide() end
-        end
-    end
+    -- BuildSelectionHighlight + ShowHighlightGroup live in
+    -- Options/Constants.lua so both the User Manual tree and the
+    -- list/detail panel render the same Blizzard-style gold-gradient
+    -- selection band.
+    local BuildSelectionHighlight = O.BuildSelectionHighlight
+    local ShowGroup = O.ShowHighlightGroup
 
     local y = 0
     for _, node in ipairs(nodes) do
@@ -439,10 +345,9 @@ local function RenderGuide(container, addonName)
     splitFrame:SetPoint("TOPLEFT", 0, belowHeaderY)
     splitFrame:SetPoint("BOTTOMRIGHT", 0, 0)
 
-    -- Compute list width
-    local listW = math.floor(containerW * PAGE_LIST_PCT)
-    if listW < PAGE_LIST_MIN then listW = PAGE_LIST_MIN end
-    if listW > PAGE_LIST_MAX then listW = PAGE_LIST_MAX end
+    -- Compute list width via the shared resolver so the standard
+    -- list/detail panel ends up the same size for the same container.
+    local listW = O.ResolveListWidth(containerW)
 
     -- Left list backdrop
     local listBg = CreateFrame("Frame", nil, splitFrame, "BackdropTemplate")
@@ -471,7 +376,7 @@ local function RenderGuide(container, addonName)
 
     -- Right detail panel
     local detailFrame = CreateFrame("Frame", nil, splitFrame, "BackdropTemplate")
-    detailFrame:SetPoint("TOPLEFT", listBg, "TOPRIGHT", PAGE_LIST_GAP, 0)
+    detailFrame:SetPoint("TOPLEFT", listBg, "TOPRIGHT", O.PAGE_LIST_GAP, 0)
     detailFrame:SetPoint("BOTTOMRIGHT", 0, 0)
     detailFrame:SetBackdrop(O.LIST_BACKDROP)
     detailFrame:SetBackdropColor(unpack(O.PANEL_BG))

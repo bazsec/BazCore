@@ -23,11 +23,10 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     splitFrame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -O.PAD, O.PAD)
     splitFrame:Show()
 
-    -- List width = ~22% of the container width (clamped to reasonable bounds)
+    -- List width via the shared resolver (28 % / 200-320 px) so the
+    -- standard list/detail panel matches the User Manual exactly.
     local containerW = container:GetWidth() or contentWidth or 600
-    local listW = math.floor(containerW * 0.22)
-    if listW < 180 then listW = 180 end
-    if listW > 320 then listW = 320 end
+    local listW = O.ResolveListWidth(containerW)
 
     -- Left: list panel
     local listBg = CreateFrame("Frame", nil, splitFrame, "BackdropTemplate")
@@ -72,7 +71,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
     -- Right: detail panel
     local detailFrame = CreateFrame("Frame", nil, splitFrame, "BackdropTemplate")
-    detailFrame:SetPoint("TOPLEFT", listBg, "TOPRIGHT", O.COL_GAP, 0)
+    detailFrame:SetPoint("TOPLEFT", listBg, "TOPRIGHT", O.PAGE_LIST_GAP, 0)
     detailFrame:SetPoint("BOTTOMRIGHT", 0, 0)
     detailFrame:SetBackdrop(O.LIST_BACKDROP)
     detailFrame:SetBackdropColor(unpack(O.PANEL_BG))
@@ -164,40 +163,54 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
     -- Builds one clickable child row. xIndent shifts the text right so
     -- grouped children read as visually nested under their header.
+    -- Selection chrome is the same Blizzard-style gold-gradient band
+    -- the User Manual tree uses (via O.BuildSelectionHighlight) so
+    -- both layouts read as cohesive across the suite.
     local function BuildChildRow(child, listY, xIndent)
         local itemBtn = CreateFrame("Button", nil, listContent)
         itemBtn:SetSize(listW - 26, O.LIST_ITEM_HEIGHT)
         itemBtn:SetPoint("TOPLEFT", 0, -listY)
 
-        local bg = itemBtn:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        bg:SetColorTexture(0, 0, 0, 0)
-        itemBtn.bg = bg
+        -- Subtle hover background for non-selected rows. Selection
+        -- itself uses the gradient highlight; the bg texture stays
+        -- as a fallback / hover surface only.
+        local hover = itemBtn:CreateTexture(nil, "BACKGROUND")
+        hover:SetAllPoints()
+        hover:SetColorTexture(1, 1, 1, 0.05)
+        hover:Hide()
+        itemBtn.hover = hover
+
+        local hlGroup = O.BuildSelectionHighlight(itemBtn, O.LIST_ITEM_HEIGHT)
+        O.ShowHighlightGroup(hlGroup, child.name == selectedKey)
+        itemBtn.hlGroup = hlGroup
 
         local text = itemBtn:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
         text:SetPoint("LEFT", xIndent or 8, 0)
+        text:SetPoint("RIGHT", -4, 0)
+        text:SetJustifyH("LEFT")
         text:SetText(child.name or "?")
-        text:SetTextColor(unpack(O.GOLD))
-        text:SetAlpha(child.name == selectedKey and 1.0 or 0.7)
+        if child.name == selectedKey then
+            text:SetTextColor(1, 1, 1)         -- white when selected
+            text:SetAlpha(1.0)
+        else
+            text:SetTextColor(unpack(O.GOLD))  -- gold otherwise
+            text:SetAlpha(0.75)
+        end
         itemBtn.text = text
 
-        itemBtn:SetScript("OnClick",  function() SelectGroup(child) end)
+        itemBtn:SetScript("OnClick", function() SelectGroup(child) end)
         itemBtn:SetScript("OnEnter", function(self)
             if child.name ~= selectedKey then
-                self.bg:SetColorTexture(unpack(O.LIST_HOVER))
+                self.hover:Show()
                 self.text:SetAlpha(1.0)
             end
         end)
         itemBtn:SetScript("OnLeave", function(self)
             if child.name ~= selectedKey then
-                self.bg:SetColorTexture(0, 0, 0, 0)
-                self.text:SetAlpha(0.7)
+                self.hover:Hide()
+                self.text:SetAlpha(0.75)
             end
         end)
-
-        if child.name == selectedKey then
-            itemBtn.bg:SetColorTexture(unpack(O.LIST_SELECTED))
-        end
 
         listButtons[#listButtons + 1] = itemBtn
         rowsByChild[child] = itemBtn

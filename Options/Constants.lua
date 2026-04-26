@@ -88,6 +88,163 @@ function O.IsDisabled(opt)
     return opt.disabled or false
 end
 
+---------------------------------------------------------------------------
+-- Selection highlight (Blizzard-style gold gradient)
+--
+-- Returns a {textures...} group that the caller toggles via Show()/Hide()
+-- when the row's selection state changes. Mirrors the highlight used by
+-- Traveler's Log + Quest tracker dialogues — two horizontal bands
+-- fading inward to a centre crest, plus thin gold lines at top + bottom
+-- that fade to transparent at each edge.
+--
+-- Used by both the User Manual tree (Options/UserGuide.lua) and the
+-- list/detail panel (Options/ListDetail.lua) so selection visuals stay
+-- cohesive across every page that uses one of those layouts.
+---------------------------------------------------------------------------
+
+function O.BuildSelectionHighlight(row, rowH)
+    rowH = rowH or row:GetHeight() or 26
+    local rowW = row:GetWidth() or 200
+    local halfW = math.floor(rowW / 2)
+
+    local function MakeBand(layer, anchor, fadeFromCenter)
+        local tex = row:CreateTexture(nil, layer)
+        tex:SetColorTexture(1, 1, 1, 1)
+        tex:SetSize(halfW, rowH)
+        tex:SetPoint(anchor, 0, 0)
+        if fadeFromCenter then
+            tex:SetGradient("HORIZONTAL",
+                CreateColor(1, 0.82, 0, 0.45),
+                CreateColor(1, 0.82, 0, 0))
+        else
+            tex:SetGradient("HORIZONTAL",
+                CreateColor(1, 0.82, 0, 0),
+                CreateColor(1, 0.82, 0, 0.45))
+        end
+        return tex
+    end
+
+    local function MakeRule(anchor1, anchor2, fadeFromCenter)
+        local tex = row:CreateTexture(nil, "OVERLAY")
+        tex:SetColorTexture(1, 1, 1, 1)
+        tex:SetSize(halfW, 1)
+        tex:SetPoint(anchor1, 0, 0)
+        if fadeFromCenter then
+            tex:SetGradient("HORIZONTAL",
+                CreateColor(1, 0.82, 0, 0.85),
+                CreateColor(1, 0.82, 0, 0))
+        else
+            tex:SetGradient("HORIZONTAL",
+                CreateColor(1, 0.82, 0, 0),
+                CreateColor(1, 0.82, 0, 0.85))
+        end
+        return tex
+    end
+
+    local bandL = MakeBand("BACKGROUND", "LEFT",  false)
+    local bandR = MakeBand("BACKGROUND", "RIGHT", true)
+    local topL  = MakeRule("TOPLEFT",     nil, false)
+    local topR  = MakeRule("TOPRIGHT",    nil, true)
+    local botL  = MakeRule("BOTTOMLEFT",  nil, false)
+    local botR  = MakeRule("BOTTOMRIGHT", nil, true)
+
+    return { bandL, bandR, topL, topR, botL, botR }
+end
+
+function O.ShowHighlightGroup(group, show)
+    for _, t in ipairs(group or {}) do
+        if show then t:Show() else t:Hide() end
+    end
+end
+
+---------------------------------------------------------------------------
+-- List/detail layout dimensions — shared so the User Manual tree and
+-- the standard list/detail panel resolve to the same widths regardless
+-- of the container size. ListDetail used to clamp at 22 % / 180-320 px;
+-- the User Manual at 28 % / 200-320. Settling on the User Manual's
+-- numbers (it's the reference for visual style across the suite).
+---------------------------------------------------------------------------
+
+O.PAGE_LIST_PCT = 0.28
+O.PAGE_LIST_MIN = 200
+O.PAGE_LIST_MAX = 320
+O.PAGE_LIST_GAP = 14
+
+function O.ResolveListWidth(containerWidth)
+    local w = math.floor((containerWidth or 600) * O.PAGE_LIST_PCT)
+    if w < O.PAGE_LIST_MIN then w = O.PAGE_LIST_MIN end
+    if w > O.PAGE_LIST_MAX then w = O.PAGE_LIST_MAX end
+    return w
+end
+
+---------------------------------------------------------------------------
+-- BuildTitleBar — shared header used by both the User Manual page and
+-- the standard list/detail page. Includes the addon icon (if available),
+-- gold title text, optional version line, and a horizontal rule
+-- underneath. Returns (frame, height) so the caller can advance its
+-- y-cursor past it.
+--
+-- opts = {
+--   title         = string,         -- displayed as gold large text
+--   addonName     = string,          -- used to look up icon + version
+--   version       = string,          -- optional override; otherwise
+--                                    -- read from the addon's .toc
+--   contentWidth  = number,          -- frame width to set
+-- }
+---------------------------------------------------------------------------
+
+function O.BuildTitleBar(parent, opts)
+    opts = opts or {}
+    local frame = CreateFrame("Frame", nil, parent)
+    local headerHeight = 44
+    local titleXOffset = O.PAD
+
+    local addonConfig = opts.addonName and BazCore.addons
+        and BazCore.addons[opts.addonName] or nil
+    local iconTex = addonConfig and addonConfig.minimap and addonConfig.minimap.icon
+    if not iconTex and opts.addonName and C_AddOns and C_AddOns.GetAddOnMetadata then
+        iconTex = C_AddOns.GetAddOnMetadata(opts.addonName, "IconTexture")
+    end
+    if iconTex then
+        local addonIcon = frame:CreateTexture(nil, "ARTWORK")
+        addonIcon:SetSize(32, 32)
+        addonIcon:SetPoint("TOPLEFT", O.PAD, -6)
+        addonIcon:SetTexture(iconTex)
+        titleXOffset = O.PAD + 40
+    end
+
+    local titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    titleText:SetPoint("TOPLEFT", titleXOffset, -6)
+    titleText:SetText(opts.title or opts.addonName or "")
+    titleText:SetTextColor(unpack(O.GOLD))
+
+    local addonVersion = opts.version
+        or (addonConfig and addonConfig.version)
+    if not addonVersion and opts.addonName and C_AddOns and C_AddOns.GetAddOnMetadata then
+        addonVersion = C_AddOns.GetAddOnMetadata(opts.addonName, "Version")
+    end
+    if addonVersion then
+        local versionText = frame:CreateFontString(nil, "OVERLAY", O.SMALL_FONT)
+        versionText:SetPoint("TOPLEFT", titleText, "BOTTOMLEFT", 0, -2)
+        versionText:SetText("v" .. addonVersion)
+        versionText:SetTextColor(unpack(O.DIM))
+        headerHeight = headerHeight + 6
+    end
+
+    local titleLine = frame:CreateTexture(nil, "ARTWORK")
+    titleLine:SetHeight(1)
+    titleLine:SetPoint("BOTTOMLEFT", O.PAD, 0)
+    titleLine:SetPoint("BOTTOMRIGHT", -O.PAD, 0)
+    titleLine:SetColorTexture(unpack(O.HEADER_LINE))
+
+    if opts.contentWidth then
+        frame:SetSize(opts.contentWidth, headerHeight)
+    else
+        frame:SetHeight(headerHeight)
+    end
+    return frame, headerHeight
+end
+
 -- Remove all children from a frame (for re-rendering)
 function O.ClearChildren(parent)
     for _, child in ipairs({ parent:GetChildren() }) do

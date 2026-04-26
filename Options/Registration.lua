@@ -136,50 +136,15 @@ local function CreateTwoPanelLayout(container, optionsTable)
     end
 
     local yOffset = -O.PAD
-    local headerHeight = 44
 
-    -- Header
-    local titleFrame = CreateFrame("Frame", nil, container)
+    -- Shared title bar (same one the User Manual uses) — addon icon,
+    -- gold title, version, horizontal rule.
+    local titleFrame, headerHeight = O.BuildTitleBar(container, {
+        title        = optionsTable.name,
+        addonName    = optionsTable.name,
+        contentWidth = contentWidth,
+    })
     titleFrame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
-
-    local titleXOffset = O.PAD
-    local addonConfig = BazCore.addons and BazCore.addons[optionsTable.name]
-    local iconTex = addonConfig and addonConfig.minimap and addonConfig.minimap.icon
-    if not iconTex and C_AddOns and C_AddOns.GetAddOnMetadata then
-        iconTex = C_AddOns.GetAddOnMetadata(optionsTable.name, "IconTexture")
-    end
-    if iconTex then
-        local addonIcon = titleFrame:CreateTexture(nil, "ARTWORK")
-        addonIcon:SetSize(32, 32)
-        addonIcon:SetPoint("TOPLEFT", O.PAD, -6)
-        addonIcon:SetTexture(iconTex)
-        titleXOffset = O.PAD + 40
-    end
-
-    local titleText = titleFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    titleText:SetPoint("TOPLEFT", titleXOffset, -6)
-    titleText:SetText(optionsTable.name or "")
-    titleText:SetTextColor(unpack(O.GOLD))
-
-    local addonVersion = addonConfig and addonConfig.version
-    if not addonVersion and optionsTable.name then
-        addonVersion = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(optionsTable.name, "Version")
-    end
-    if addonVersion then
-        local versionText = titleFrame:CreateFontString(nil, "OVERLAY", O.SMALL_FONT)
-        versionText:SetPoint("TOPLEFT", titleText, "BOTTOMLEFT", 0, -2)
-        versionText:SetText("v" .. addonVersion)
-        versionText:SetTextColor(unpack(O.DIM))
-        headerHeight = headerHeight + 6
-    end
-
-    local titleLine = titleFrame:CreateTexture(nil, "ARTWORK")
-    titleLine:SetHeight(1)
-    titleLine:SetPoint("BOTTOMLEFT", O.PAD, 0)
-    titleLine:SetPoint("BOTTOMRIGHT", -O.PAD, 0)
-    titleLine:SetColorTexture(unpack(O.HEADER_LINE))
-
-    titleFrame:SetSize(contentWidth, headerHeight)
     yOffset = yOffset - headerHeight
 
     -- Top-level items
