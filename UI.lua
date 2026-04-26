@@ -485,3 +485,131 @@ function BazCore:CreatePortraitWindow(globalName, opts)
 
     return f
 end
+
+---------------------------------------------------------------------------
+-- BazCore:CreateItemButton(parent, opts) -> Button
+--
+-- Builds a vanilla Button frame styled like Blizzard's ItemButton —
+-- icon, quality border, optional slot background, optional count and
+-- cooldown — without inheriting any XML template. Both
+-- ItemButtonTemplate and BagSlotButtonTemplate exist in retail
+-- Midnight's XML but aren't exposed as runtime CreateFrame targets,
+-- so any addon trying to inherit them throws "Couldn't find inherited
+-- node". Going manual here keeps consumers off that landmine and
+-- gives us one styling point for the suite.
+--
+-- opts (all optional):
+--   size       number   button edge length, default 36
+--   name       string   global name (omit for anonymous)
+--   slotAtlas  string   atlas drawn behind the icon (e.g. the
+--                       "bags-item-slot64" empty-slot artwork) — when
+--                       no item is set the slot art shows through
+--   quality    bool     create a quality border child (default true)
+--   count      bool     create a stack-count fontstring (default false)
+--   cooldown   bool     create a CooldownFrameTemplate child (default false)
+--   highlight  bool     hover highlight texture (default true)
+--   pushed     bool     click-down feedback texture (default true)
+--
+-- Methods on the returned button:
+--   :SetIconTexture(texture)  show + set icon, or hide if texture is nil
+--   :SetQuality(quality, link)  tint border for uncommon+, hide otherwise
+--   :SetCount(n)              show if n > 1, hide otherwise
+--
+-- Children exposed for direct manipulation:
+--   .SlotBackground  (only if slotAtlas was set)
+--   .icon
+--   .IconBorder      (only if quality wasn't disabled)
+--   .Count           (only if count was enabled)
+--   .Cooldown        (only if cooldown was enabled)
+--
+-- Click + drag handlers are deliberately NOT wired here — the caller
+-- attaches whatever scripts make sense (PickupBagFromSlot,
+-- UseContainerItem, custom popup logic, etc.).
+---------------------------------------------------------------------------
+
+function BazCore:CreateItemButton(parent, opts)
+    opts = opts or {}
+    local size = opts.size or 36
+
+    local btn = CreateFrame("Button", opts.name, parent)
+    btn:SetSize(size, size)
+
+    -- Empty-slot artwork — drawn under the icon, so when no item is
+    -- assigned the slot art shows through.
+    if opts.slotAtlas then
+        btn.SlotBackground = btn:CreateTexture(nil, "BACKGROUND")
+        btn.SlotBackground:SetAtlas(opts.slotAtlas)
+        btn.SlotBackground:SetAllPoints()
+    end
+
+    -- Item icon — 1 px inset on each side leaves room for the
+    -- quality border + standard ItemButton bevel pattern.
+    btn.icon = btn:CreateTexture(nil, "BORDER")
+    btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    btn.icon:SetPoint("TOPLEFT",     1, -1)
+    btn.icon:SetPoint("BOTTOMRIGHT", -1, 1)
+    btn.icon:Hide()
+
+    -- Quality border (default on). WhiteIconFrame is the same texture
+    -- Blizzard's ItemButton uses; vertex-tinted per quality colour.
+    if opts.quality ~= false then
+        btn.IconBorder = btn:CreateTexture(nil, "OVERLAY")
+        btn.IconBorder:SetTexture("Interface/Common/WhiteIconFrame")
+        btn.IconBorder:SetAllPoints(btn.icon)
+        btn.IconBorder:Hide()
+    end
+
+    -- Stack count text (opt in).
+    if opts.count then
+        btn.Count = btn:CreateFontString(nil, "ARTWORK", "NumberFontNormal")
+        btn.Count:SetPoint("BOTTOMRIGHT", -3, 2)
+        btn.Count:Hide()
+    end
+
+    -- Cooldown sweep (opt in). Anchored to the icon so the swirl sits
+    -- inside the button's bevel rather than the full frame.
+    if opts.cooldown then
+        btn.Cooldown = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
+        btn.Cooldown:SetAllPoints(btn.icon)
+    end
+
+    if opts.highlight ~= false then
+        btn:SetHighlightTexture("Interface/Buttons/ButtonHilight-Square", "ADD")
+    end
+    if opts.pushed ~= false then
+        btn:SetPushedTexture("Interface/Buttons/UI-Quickslot-Depress")
+    end
+
+    function btn:SetIconTexture(texture)
+        if texture then
+            self.icon:SetTexture(texture)
+            self.icon:Show()
+        else
+            self.icon:Hide()
+        end
+    end
+
+    function btn:SetQuality(quality, link)
+        local border = self.IconBorder
+        if not border then return end
+        if quality and quality > 1 then
+            local r, g, b = GetItemQualityColor(quality)
+            border:SetVertexColor(r, g, b)
+            border:Show()
+        else
+            border:Hide()
+        end
+    end
+
+    function btn:SetCount(n)
+        if not self.Count then return end
+        if n and n > 1 then
+            self.Count:SetText(n)
+            self.Count:Show()
+        else
+            self.Count:Hide()
+        end
+    end
+
+    return btn
+end
