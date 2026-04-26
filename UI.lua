@@ -379,7 +379,11 @@ end
 --       -- Optional portrait interactivity. Setting either of these
 --       -- enables a click-overlay sized to the portrait circle:
 --       portraitTooltip = {
---           title = "Foo",
+--           title  = "Foo",
+--           anchor = "ANCHOR_LEFT",          -- optional, defaults LEFT
+--                                            -- (so the tooltip clears the
+--                                            -- popup space above-right of
+--                                            -- the portrait)
 --           lines = {                         -- one per row
 --               "|cffffd700Right-click|r to change bags",
 --               "|cffffd700Drag|r to move",
@@ -465,8 +469,16 @@ function BazCore:CreatePortraitWindow(globalName, opts)
 
         local tt = opts.portraitTooltip
         if tt then
+            -- ANCHOR_LEFT by default: the portrait sits at the window's
+            -- top-left, and consumers (e.g. BazBags) often hang an
+            -- action popup above-right of the portrait via the
+            -- portraitOnClick handler. Sending the tooltip RIGHT would
+            -- land it on top of that popup; LEFT puts it in the empty
+            -- space outside the window. Override via tt.anchor when
+            -- the consumer's layout calls for something different.
+            local anchor = tt.anchor or "ANCHOR_LEFT"
             hit:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetOwner(self, anchor)
                 if tt.title and tt.title ~= "" then
                     GameTooltip:SetText(tt.title)
                 end
