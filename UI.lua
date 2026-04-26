@@ -350,3 +350,92 @@ function BazCore:CreateStatusBar(parent, opts)
 
     return bar
 end
+
+---------------------------------------------------------------------------
+-- Portrait Window
+--
+-- Spawns a Frame using Blizzard's PortraitFrameFlatTemplate — the same
+-- gold-ornate-bordered window with a portrait circle in the top-left
+-- corner that the combined bag, character pane, and most major
+-- Blizzard panels use. Centralised here so any Baz addon wanting a
+-- Blizzard-styled window gets:
+--
+--   * Title bar with portrait icon + close button
+--   * Drag-by-frame movement
+--   * Optional position persistence (per-addon setting key)
+--   * Optional ESC-close via UISpecialFrames
+--
+-- Usage:
+--   local f = BazCore:CreatePortraitWindow("BazFooFrame", {
+--       title          = "Foo",
+--       portrait       = 5160585,            -- texture path or fileID
+--       width          = 360,
+--       height         = 400,
+--       savedAddon     = addon,              -- BazCore addon handle for persistence
+--       savedKey       = "position",         -- setting key on that addon
+--       uiSpecialFrame = true,               -- register for ESC close
+--       strata         = "MEDIUM",           -- optional, defaults MEDIUM
+--   })
+--
+-- Returns the Frame ready to populate.
+---------------------------------------------------------------------------
+
+function BazCore:CreatePortraitWindow(globalName, opts)
+    opts = opts or {}
+
+    local f = CreateFrame("Frame", globalName, UIParent, "PortraitFrameFlatTemplate")
+    f:SetSize(opts.width or 360, opts.height or 400)
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:SetClampedToScreen(true)
+    f:SetFrameStrata(opts.strata or "MEDIUM")
+    f:SetToplevel(true)
+    f:RegisterForDrag("LeftButton")
+    f:Hide()
+
+    -- Title + portrait. PortraitFrameMixin adds these as methods on
+    -- frames that inherit from PortraitFrameBaseTemplate.
+    if opts.title and f.SetTitle then
+        f:SetTitle(opts.title)
+    end
+    if opts.portrait and f.SetPortraitToAsset then
+        f:SetPortraitToAsset(opts.portrait)
+    end
+
+    -- Position handling. With savedAddon + savedKey we restore the
+    -- last-used position on creation and persist on drag-stop.
+    -- Without them the frame is just centred and drag is ephemeral.
+    local savedAddon = opts.savedAddon
+    local savedKey   = opts.savedKey
+    do
+        f:ClearAllPoints()
+        local saved = savedAddon and savedKey and savedAddon:GetSetting(savedKey) or nil
+        if saved and saved.point then
+            f:SetPoint(saved.point, UIParent, saved.relPoint or saved.point,
+                       saved.x or 0, saved.y or 0)
+        else
+            f:SetPoint("CENTER")
+        end
+    end
+
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        if savedAddon and savedKey then
+            local point, _, relPoint, x, y = self:GetPoint()
+            savedAddon:SetSetting(savedKey, {
+                point    = point,
+                relPoint = relPoint,
+                x        = x,
+                y        = y,
+            })
+        end
+    end)
+
+    -- ESC closes via Blizzard's UISpecialFrames mechanism.
+    if opts.uiSpecialFrame and globalName then
+        tinsert(UISpecialFrames, globalName)
+    end
+
+    return f
+end
