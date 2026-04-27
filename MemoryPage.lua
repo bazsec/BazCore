@@ -821,11 +821,15 @@ local function GetMemoryPage()
             dumpButton = {
                 order = 43,
                 type  = "execute",
-                name  = "Dump Log to Chat",
-                desc  = "Prints the full persistent memory log (CSV - comma-separated values) to chat. Copy and paste into a spreadsheet for analysis, or share in a bug report. Slash equivalent: /bazmem dump.",
+                name  = "Export Log",
+                desc  = "Opens a popup with the full persistent memory log (CSV) in a selectable text box. Click Select All, then Ctrl+C to copy. Paste into a spreadsheet for analysis, or share in a bug report. Slash equivalents: /bazmem export (popup), /bazmem dump (chat).",
                 width = "half",
                 func  = function()
-                    if BazCore.DumpMemoryLog then BazCore:DumpMemoryLog() end
+                    if BazCore.OpenMemoryDumpDialog then
+                        BazCore:OpenMemoryDumpDialog()
+                    elseif BazCore.DumpMemoryLog then
+                        BazCore:DumpMemoryLog()
+                    end
                 end,
             },
             resetLogButton = {

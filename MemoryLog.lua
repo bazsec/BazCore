@@ -199,18 +199,23 @@ function BazCore:GetMemoryGrowth(windowSec)
     return out, oldest.t, latest.t
 end
 
--- DumpMemoryLog()
---   Prints the log to chat as CSV (timestamp, total, per-addon...).
---   Comma-separated rather than tab-separated because WoW's chat frame
---   doesn't render \t as spacing - it substitutes a glyph, which makes
---   tabs unreadable in chat. CSV pastes cleanly into spreadsheets too.
---   Label fields that might contain a comma (zone names) are quoted.
-function BazCore:DumpMemoryLog()
-    local hist = self:GetMemoryHistory()
-    if #hist == 0 then
-        print("|cffffd700BazCore:|r memory log is empty - wait for the first sample (samples are taken every minute).")
-        return
+-- Quote a CSV field if it could break parsing - i.e. contains a
+-- comma or quote. Numbers and timestamps go through as-is.
+local function CsvField(v)
+    if v == nil then return "" end
+    local s = tostring(v)
+    if s:find('[",]') then
+        return '"' .. s:gsub('"', '""') .. '"'
     end
+    return s
+end
+
+-- BuildDumpString()
+--   Builds the full CSV log as a single string (instead of printing
+--   line-by-line). Used by the popup dialog and any future export hook.
+local function BuildDumpString()
+    local hist = BazCore:GetMemoryHistory()
+    if #hist == 0 then return nil end
 
     -- Collect every addon name across the history so the CSV columns
     -- line up even when an addon was registered partway through.
@@ -225,41 +230,185 @@ function BazCore:DumpMemoryLog()
     end
     table.sort(nameList)
 
-    -- Quote a CSV field if it could break parsing - i.e. contains a
-    -- comma or quote. Numbers and timestamps go through as-is.
-    local function CsvField(v)
-        if v == nil then return "" end
-        local s = tostring(v)
-        if s:find('[",]') then
-            return '"' .. s:gsub('"', '""') .. '"'
-        end
-        return s
-    end
+    local lines = {}
 
-    print("|cffffd700BazCore Memory Log:|r " .. #hist .. " sample(s). Copy lines below into a spreadsheet (CSV):")
-
+    -- Header
     local header = { "time", "total_kb" }
     for _, n in ipairs(nameList) do header[#header + 1] = n end
-    print(table.concat(header, ","))
+    lines[#lines + 1] = table.concat(header, ",")
 
+    -- Data rows
     for _, s in ipairs(hist) do
         local row = { date("%Y-%m-%d %H:%M:%S", s.t), string.format("%.0f", s.total) }
         for _, n in ipairs(nameList) do
             row[#row + 1] = string.format("%.0f", s.addons[n] or 0)
         end
-        print(table.concat(row, ","))
+        lines[#lines + 1] = table.concat(row, ",")
     end
 
-    local events = self:GetMemoryEvents()
+    -- Events appended after a blank line so a CSV parser can split
+    -- them into a separate sheet if desired.
+    local events = BazCore:GetMemoryEvents()
     if #events > 0 then
-        print("|cffffd700Events|r (time,type,label):")
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "time,type,label"
         for _, e in ipairs(events) do
-            print(string.format("%s,%s,%s",
+            lines[#lines + 1] = string.format("%s,%s,%s",
                 date("%Y-%m-%d %H:%M:%S", e.t),
                 CsvField(e.type),
-                CsvField(e.label)))
+                CsvField(e.label))
         end
     end
+
+    return table.concat(lines, "\n"), #hist
+end
+
+-- DumpMemoryLog()
+--   Prints the log to chat as CSV. Kept for /bazmem dump - useful
+--   when you want a quick scan of recent rows without the popup.
+function BazCore:DumpMemoryLog()
+    local content, sampleCount = BuildDumpString()
+    if not content then
+        print("|cffffd700BazCore:|r memory log is empty - wait for the first sample (samples are taken every minute).")
+        return
+    end
+
+    print("|cffffd700BazCore Memory Log:|r " .. sampleCount .. " sample(s). Copy lines below into a spreadsheet (CSV):")
+    for line in content:gmatch("[^\n]+") do
+        print(line)
+    end
+end
+
+---------------------------------------------------------------------------
+-- Popup dialog with a scrollable, selectable EditBox of the full CSV.
+-- Friendlier export path than the chat dump: paste-ready, no chat-line
+-- spam, full content visible at once. Built lazily on first open.
+---------------------------------------------------------------------------
+
+local dumpDialog
+
+local function CreateDumpDialog()
+    local f = CreateFrame("Frame", "BazCoreMemoryDumpDialog", UIParent, "BackdropTemplate")
+    f:SetSize(640, 460)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel(100)
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    f:SetClampedToScreen(true)
+    f:SetBackdrop({
+        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+        tile     = true, tileSize = 16, edgeSize = 16,
+        insets   = { left = 5, right = 5, top = 5, bottom = 5 },
+    })
+    f:SetBackdropColor(0.04, 0.04, 0.06, 0.95)
+    f:SetBackdropBorderColor(0.4, 0.35, 0.2, 0.95)
+    f:Hide()
+
+    -- Title
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -14)
+    title:SetText("BazCore Memory Log Export")
+    title:SetTextColor(1, 0.82, 0)
+    f.title = title
+
+    local sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
+    sub:SetText("CSV format. Click |cffffd700Select All|r then press |cffffd700Ctrl+C|r to copy.")
+    sub:SetTextColor(0.75, 0.75, 0.75)
+
+    -- Close X button (top-right)
+    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", 0, 0)
+    close:SetScript("OnClick", function() f:Hide() end)
+
+    -- Scroll frame containing the EditBox
+    local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 16, -56)
+    scroll:SetPoint("BOTTOMRIGHT", -34, 50)
+
+    local editFrame = CreateFrame("Frame", nil, scroll, "BackdropTemplate")
+    editFrame:SetSize(560, 360)
+    editFrame:SetBackdrop({
+        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 8,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    editFrame:SetBackdropColor(0, 0, 0, 0.5)
+    editFrame:SetBackdropBorderColor(0.3, 0.25, 0.15, 0.7)
+    scroll:SetScrollChild(editFrame)
+
+    local editBox = CreateFrame("EditBox", nil, editFrame)
+    editBox:SetMultiLine(true)
+    editBox:SetMaxLetters(0)            -- 0 = no limit; large logs need this
+    editBox:SetFontObject("ChatFontNormal")
+    editBox:SetWidth(540)
+    editBox:SetAutoFocus(false)
+    editBox:SetPoint("TOPLEFT", 8, -8)
+    editBox:SetPoint("BOTTOMRIGHT", -8, 8)
+    editBox:SetScript("OnEscapePressed", function() f:Hide() end)
+    -- Re-highlight on click so fresh paste flow stays one-step.
+    editBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+    f.editBox = editBox
+
+    -- Bottom button row
+    local copyBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    copyBtn:SetSize(120, 24)
+    copyBtn:SetPoint("BOTTOMLEFT", 16, 14)
+    copyBtn:SetText("Select All")
+    copyBtn:SetScript("OnClick", function()
+        editBox:SetFocus()
+        editBox:HighlightText()
+    end)
+
+    local hint = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    hint:SetPoint("LEFT", copyBtn, "RIGHT", 12, 0)
+    hint:SetText("then press |cffffd700Ctrl+C|r to copy")
+    hint:SetTextColor(0.7, 0.7, 0.7)
+
+    local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    closeBtn:SetSize(100, 24)
+    closeBtn:SetPoint("BOTTOMRIGHT", -16, 14)
+    closeBtn:SetText("Close")
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    -- Stats (sample count, char count) above the buttons
+    local stats = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    stats:SetPoint("BOTTOMLEFT", 16, 38)
+    stats:SetTextColor(0.55, 0.55, 0.55)
+    f.stats = stats
+
+    -- ESC closes (and free up its slot if multiple dialogs use this).
+    table.insert(UISpecialFrames, "BazCoreMemoryDumpDialog")
+
+    return f
+end
+
+-- OpenMemoryDumpDialog()
+--   Opens (or rebuilds the content of) the export dialog. If the log
+--   is empty, surfaces a helpful chat message instead of an empty
+--   popup so the user understands what to do.
+function BazCore:OpenMemoryDumpDialog()
+    local content, sampleCount = BuildDumpString()
+    if not content then
+        print("|cffffd700BazCore:|r memory log is empty - wait for the first sample (samples are taken every minute).")
+        return
+    end
+
+    if not dumpDialog then dumpDialog = CreateDumpDialog() end
+
+    dumpDialog.editBox:SetText(content)
+    dumpDialog.stats:SetText(string.format("%d sample(s) | %d characters",
+        sampleCount, #content))
+    dumpDialog:Show()
+    dumpDialog:Raise()
+    dumpDialog.editBox:SetFocus()
+    dumpDialog.editBox:HighlightText()
 end
 
 -- ResetMemoryLog()
@@ -324,6 +473,10 @@ end)
 SLASH_BAZMEM1 = "/bazmem"
 SlashCmdList.BAZMEM = function(msg)
     msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if msg == "export" or msg == "popup" then
+        BazCore:OpenMemoryDumpDialog()
+        return
+    end
     if msg == "dump" then
         BazCore:DumpMemoryLog()
         return
@@ -346,5 +499,5 @@ SlashCmdList.BAZMEM = function(msg)
         print(string.format("  %-22s %s%.1f KB  (%s%.1f KB/h)  now %.0f KB",
             g.name, sign, g.deltaKB, sign, g.ratePerHour, g.latestKB))
     end
-    print("Type |cffffd700/bazmem dump|r for full TSV export, |cffffd700/bazmem reset|r to clear.")
+    print("|cffffd700/bazmem export|r popup CSV, |cffffd700/bazmem dump|r chat CSV, |cffffd700/bazmem reset|r clear log.")
 end
