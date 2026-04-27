@@ -178,7 +178,7 @@ function BazCore:RegisterMinimapEntry(addonName, minimapConfig)
     if not button then
         BazCore:QueueForLogin(function()
             CreateButton()
-        end)
+        end, "MinimapButton:Create")
     end
 end
 

@@ -32,24 +32,50 @@ end
 local loginReady = false
 local loginQueue = {}
 
+-- Memory-log phase marker. Defined as a local stub before MemoryLog
+-- has loaded; the real MarkMemoryEvent is published once that file
+-- runs. The check makes it safe to call from any startup path.
+local function PhaseMark(label)
+    if BazCore.MarkMemoryEvent then
+        BazCore:MarkMemoryEvent("phase", label)
+    end
+end
+
 local lifecycleFrame = CreateFrame("Frame")
 lifecycleFrame:RegisterEvent("PLAYER_LOGIN")
 lifecycleFrame:SetScript("OnEvent", function(self, event)
     if event == "PLAYER_LOGIN" then
         loginReady = true
-        for _, fn in ipairs(loginQueue) do
+        PhaseMark("login:queue-start (" .. #loginQueue .. " callbacks)")
+        for _, entry in ipairs(loginQueue) do
+            local fn    = entry.fn or entry
+            local label = entry.label
+            if label then PhaseMark("login:before-" .. label) end
             fn()
+            if label then PhaseMark("login:after-" .. label) end
         end
         wipe(loginQueue)
+        PhaseMark("login:queue-end")
         self:UnregisterEvent("PLAYER_LOGIN")
     end
 end)
 
-function BazCore:QueueForLogin(fn)
+-- QueueForLogin(fn [, label])
+--   Queues a callback for PLAYER_LOGIN. When `label` is provided, the
+--   memory log brackets the callback's execution with phase markers
+--   so the next /bazmem armwatch dump shows which queued task was
+--   responsible for any spike.
+function BazCore:QueueForLogin(fn, label)
     if loginReady then
+        if label then PhaseMark("login:before-" .. label) end
         fn()
+        if label then PhaseMark("login:after-" .. label) end
     else
-        table.insert(loginQueue, fn)
+        if label then
+            table.insert(loginQueue, { fn = fn, label = label })
+        else
+            table.insert(loginQueue, fn)
+        end
     end
 end
 
@@ -117,11 +143,13 @@ function BazCore:RegisterAddon(name, config)
 
         addon.loaded = true
 
-        -- onReady callback (after SV + UI init + PLAYER_LOGIN)
+        -- onReady callback (after SV + UI init + PLAYER_LOGIN). The
+        -- label flows through to the memory-log phase markers so a
+        -- /bazmem armwatch dump shows per-addon onReady cost.
         if config.onReady then
             BazCore:QueueForLogin(function()
                 config.onReady(addon)
-            end)
+            end, "onReady:" .. name)
         end
     end)
 
@@ -151,6 +179,11 @@ BazCore:QueueForLogin(function()
     BazCoreDB.minimap = BazCoreDB.minimap or { hide = false }
 
     BazCoreDB.welcomeMessage = BazCoreDB.welcomeMessage == nil and true or BazCoreDB.welcomeMessage
+
+    -- (the rest of this callback registers BazCore's own pages -
+    -- Landing, Settings subcategory, Profiles subcategory)
+    -- Labelled "BazCoreSelfPages" so the memory-log phase markers
+    -- attribute any allocation that happens here cleanly.
 
     -- Landing page
     BazCore:RegisterOptionsTable("BazCore", function()
@@ -231,7 +264,7 @@ BazCore:QueueForLogin(function()
         end)
         BazCore:AddToSettings("BazCore-Profiles", "Profiles", "BazCore")
     end
-end)
+end, "BazCoreSelfPages")
 
 ---------------------------------------------------------------------------
 -- Do Not Disturb: environmental state check

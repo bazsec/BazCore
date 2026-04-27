@@ -36,5 +36,5 @@ end
 
 -- AddonList may be load-on-demand depending on the client version. Try at
 -- login and also when the Blizzard_AddonList addon loads.
-BazCore:QueueForLogin(AttachAddonOptionsButton)
+BazCore:QueueForLogin(AttachAddonOptionsButton, "AddonListButton:Attach")
 EventUtil.ContinueOnAddOnLoaded("Blizzard_AddonList", AttachAddonOptionsButton)
