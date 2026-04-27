@@ -102,6 +102,14 @@ local function Snapshot()
         sample.total = sample.total + kb
     end
 
+    -- collectgarbage("count") returns the total Lua heap size in KB
+    -- across the entire UI. Per-addon GetAddOnMemoryUsage undercounts
+    -- because it doesn't capture transient intermediate strings /
+    -- upvalues that the GC eventually reclaims. Watching the Lua heap
+    -- shows the REAL allocation rate so we can spot spikes that don't
+    -- show up cleanly in the per-addon columns.
+    sample.luaHeapKB = collectgarbage and collectgarbage("count") or 0
+
     log.head = (log.head % MAX_SAMPLES) + 1
     log.samples[log.head] = sample
     Save()
@@ -232,14 +240,20 @@ local function BuildDumpString()
 
     local lines = {}
 
-    -- Header
-    local header = { "time", "total_kb" }
+    -- Header. lua_heap_kb is the full Lua heap (collectgarbage count) -
+    -- a stronger signal than the per-addon columns because it captures
+    -- intermediate strings / closures the GC eventually reclaims.
+    local header = { "time", "total_kb", "lua_heap_kb" }
     for _, n in ipairs(nameList) do header[#header + 1] = n end
     lines[#lines + 1] = table.concat(header, ",")
 
     -- Data rows
     for _, s in ipairs(hist) do
-        local row = { date("%Y-%m-%d %H:%M:%S", s.t), string.format("%.0f", s.total) }
+        local row = {
+            date("%Y-%m-%d %H:%M:%S", s.t),
+            string.format("%.0f", s.total),
+            string.format("%.0f", s.luaHeapKB or 0),
+        }
         for _, n in ipairs(nameList) do
             row[#row + 1] = string.format("%.0f", s.addons[n] or 0)
         end
@@ -312,6 +326,40 @@ function BazCore:ResetMemoryLog()
     Save()
 end
 
+-- MarkMemoryEvent(type, label)
+--   Public hook for any module to drop a labeled annotation in the
+--   log. Snapshots first, then tags the new sample with the given
+--   type + label so the dump shows memory at exactly that moment.
+--   Use for: panel-show/hide hooks, tab-switch hooks, expensive
+--   one-shot operations the user wants to bracket.
+function BazCore:MarkMemoryEvent(evType, label)
+    PushEvent(evType or "mark", label)
+end
+
+-- WatchMemory(durationSec, intervalSec)
+--   Switches to high-frequency sampling for `durationSec` seconds, at
+--   `intervalSec` cadence (default 2 s). Useful for catching transient
+--   spikes that the per-minute ticker glosses over - the user invokes
+--   this right before reproducing the issue.
+local watchTicker
+function BazCore:WatchMemory(durationSec, intervalSec)
+    durationSec = tonumber(durationSec) or 60
+    intervalSec = tonumber(intervalSec) or 2
+    if watchTicker then watchTicker:Cancel() end
+
+    local started = GetTime()
+    PushEvent("watch_start", string.format("%ds @ %.1fs cadence", durationSec, intervalSec))
+
+    watchTicker = C_Timer.NewTicker(intervalSec, function(self)
+        Snapshot()
+        if (GetTime() - started) >= durationSec then
+            PushEvent("watch_end")
+            self:Cancel()
+            watchTicker = nil
+        end
+    end)
+end
+
 ---------------------------------------------------------------------------
 -- Event hookup
 --
@@ -363,18 +411,41 @@ end)
 
 SLASH_BAZMEM1 = "/bazmem"
 SlashCmdList.BAZMEM = function(msg)
-    msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-    if msg == "export" or msg == "popup" then
+    msg = msg or ""
+
+    -- Strip the trailing whitespace but preserve case + spaces inside
+    -- the label so "/bazmem mark After Opening Panel" works.
+    local raw = msg:gsub("^%s+", ""):gsub("%s+$", "")
+    local cmd = raw:match("^(%S+)") or ""
+    local rest = raw:sub(#cmd + 1):gsub("^%s+", "")
+    local lcmd = cmd:lower()
+
+    if lcmd == "export" or lcmd == "popup" then
         BazCore:OpenMemoryDumpDialog()
         return
     end
-    if msg == "dump" then
+    if lcmd == "dump" then
         BazCore:DumpMemoryLog()
         return
     end
-    if msg == "reset" then
+    if lcmd == "reset" then
         BazCore:ResetMemoryLog()
         print("|cffffd700BazCore:|r memory log cleared.")
+        return
+    end
+    if lcmd == "mark" then
+        local label = rest ~= "" and rest or "manual mark"
+        BazCore:MarkMemoryEvent("mark", label)
+        local heap = collectgarbage and collectgarbage("count") or 0
+        print(string.format("|cffffd700BazCore:|r marked '%s' (Lua heap: %.0f KB)", label, heap))
+        return
+    end
+    if lcmd == "watch" then
+        local secs = tonumber(rest:match("^(%d+)")) or 60
+        local cadence = tonumber(rest:match("@(%d+%.?%d*)")) or 2
+        BazCore:WatchMemory(secs, cadence)
+        print(string.format("|cffffd700BazCore:|r sampling every %.1fs for %ds. Reproduce the issue now; results land in the log.",
+            cadence, secs))
         return
     end
 
@@ -390,5 +461,10 @@ SlashCmdList.BAZMEM = function(msg)
         print(string.format("  %-22s %s%.1f KB  (%s%.1f KB/h)  now %.0f KB",
             g.name, sign, g.deltaKB, sign, g.ratePerHour, g.latestKB))
     end
-    print("|cffffd700/bazmem export|r popup CSV, |cffffd700/bazmem dump|r chat CSV, |cffffd700/bazmem reset|r clear log.")
+    print("|cffffd700Commands:|r")
+    print("  |cffffd700/bazmem mark <label>|r  - tag an event in the log")
+    print("  |cffffd700/bazmem watch <secs>|r  - sample every 2s for a burst")
+    print("  |cffffd700/bazmem export|r        - popup CSV (paste-friendly)")
+    print("  |cffffd700/bazmem dump|r          - chat CSV (quick scan)")
+    print("  |cffffd700/bazmem reset|r         - clear log")
 end

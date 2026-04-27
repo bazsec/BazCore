@@ -374,6 +374,12 @@ BazCore._RenderIntoCanvas = RenderIntoCanvas
 local function SelectSubcategory(key)
     activeSubcategory = key
     if not window then return end
+    -- Tag the moment of selection so the persistent memory log shows
+    -- which sub-page the user navigated to. Helpful for finding
+    -- "User Manual click was the spike trigger" type insights.
+    if BazCore.MarkMemoryEvent then
+        BazCore:MarkMemoryEvent("subcat_select", key)
+    end
 
     -- Update sidebar highlights. Uses the same gold-gradient
     -- highlight + white-on-selected text the sub-lists use, so the
@@ -469,6 +475,9 @@ end
 local function SelectAddon(name)
     activeAddon = name
     if not window then return end
+    if BazCore.MarkMemoryEvent then
+        BazCore:MarkMemoryEvent("addon_select", name)
+    end
 
     -- Update bottom tab visuals
     for tabName, tab in pairs(bottomTabs) do
@@ -585,6 +594,20 @@ local function EnsureWindow()
     f.tabContainer = tabContainer
 
     tinsert(UISpecialFrames, "BazCoreOptionsWindow")
+
+    -- Auto-mark window show/hide in the persistent memory log so the
+    -- user can pinpoint exactly which UI action caused a memory spike
+    -- without having to /bazmem mark by hand each time.
+    f:HookScript("OnShow", function()
+        if BazCore.MarkMemoryEvent then
+            BazCore:MarkMemoryEvent("panel_show", activeAddon or "")
+        end
+    end)
+    f:HookScript("OnHide", function()
+        if BazCore.MarkMemoryEvent then
+            BazCore:MarkMemoryEvent("panel_hide")
+        end
+    end)
 
     window = f
     return f
