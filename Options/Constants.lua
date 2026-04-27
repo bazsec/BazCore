@@ -308,48 +308,53 @@ function O.RenderListRows(listContent, rows, opts)
         -- without ordering (User Manual tree, source headers) skip
         -- the arrows entirely so the right edge stays clean.
         --
-        -- Style: matches Blizzard's WowStyle1DropdownTemplate (the
-        -- small status-dropdown button next to the green dot in the
-        -- Contacts/Friends panel). Same atlas pair Blizzard uses:
-        --   common-dropdown-textholder = dark frame chrome
-        --   common-dropdown-a-button   = gold chevron (rotated 180 for up)
-        -- Hover lightens the chevron to white, disabled rows dim it.
+        -- Style: same atlas Blizzard uses for WowStyle1ArrowDropdown
+        -- (the chevron-button on the FriendsFrame status dropdown).
+        -- common-dropdown-a-button is a COMPLETE button graphic - chrome
+        -- + chevron baked together - so we use it as the whole button
+        -- with no extra backdrop (which is what produced the
+        -- "button-in-button" look earlier). Blizzard's mixin swaps
+        -- atlas variants for hover / pressed / disabled, mirrored here.
         local rightInset = 4
         if spec.moveUp ~= nil or spec.moveDown ~= nil then
             local function MakeArrow(rotation, callback, anchorRight)
                 local btn = CreateFrame("Button", nil, row)
-                btn:SetSize(20, 20)
+                btn:SetSize(22, 22)
                 btn:SetPoint("RIGHT", -anchorRight, 0)
-                -- Dark dropdown frame chrome behind the chevron.
-                local bg = btn:CreateTexture(nil, "BACKGROUND")
-                bg:SetAtlas("common-dropdown-textholder")
-                bg:SetPoint("TOPLEFT",     -4,  4)
-                bg:SetPoint("BOTTOMRIGHT",  4, -4)
-                -- Gold chevron, rotated 180 for the up arrow.
-                local arrow = btn:CreateTexture(nil, "OVERLAY")
-                arrow:SetAtlas("common-dropdown-a-button")
-                arrow:SetSize(10, 6)
-                arrow:SetPoint("CENTER")
-                arrow:SetRotation(rotation)
-                btn.arrow = arrow
-                btn.bg    = bg
+                local tex = btn:CreateTexture(nil, "ARTWORK")
+                tex:SetAllPoints()
+                tex:SetAtlas("common-dropdown-a-button")
+                tex:SetRotation(rotation)
+                btn.tex = tex
                 if callback then
+                    btn:RegisterForClicks("LeftButtonUp")
                     btn:SetScript("OnClick", function() callback() end)
-                    btn:SetScript("OnEnter", function(self) self.arrow:SetVertexColor(1, 1, 1) end)
-                    btn:SetScript("OnLeave", function(self) self.arrow:SetVertexColor(1, 1, 1) end)
+                    btn:SetScript("OnEnter", function(self)
+                        self.tex:SetAtlas("common-dropdown-a-button-hover")
+                    end)
+                    btn:SetScript("OnLeave", function(self)
+                        self.tex:SetAtlas("common-dropdown-a-button")
+                    end)
+                    btn:SetScript("OnMouseDown", function(self)
+                        self.tex:SetAtlas("common-dropdown-a-button-pressed")
+                    end)
+                    btn:SetScript("OnMouseUp", function(self)
+                        self.tex:SetAtlas(self:IsMouseOver()
+                            and "common-dropdown-a-button-hover"
+                            or  "common-dropdown-a-button")
+                    end)
                 else
                     btn:EnableMouse(false)
-                    arrow:SetVertexColor(0.45, 0.45, 0.45)
-                    bg:SetVertexColor(0.55, 0.55, 0.55)
+                    tex:SetAtlas("common-dropdown-a-button-disabled")
                 end
                 return btn
             end
-            -- Down arrow flush to the right (no rotation - chevron
-            -- atlas points down by default), up arrow rotated 180 to
-            -- its left.
-            MakeArrow(0,       spec.moveDown, 8)
-            MakeArrow(math.pi, spec.moveUp,   30)
-            rightInset = 56  -- reserve room so label doesn't overlap arrows
+            -- Down arrow flush to the right (no rotation - the atlas
+            -- points down by default since dropdowns open downward),
+            -- up arrow rotated 180 to its left.
+            MakeArrow(0,       spec.moveDown, 6)
+            MakeArrow(math.pi, spec.moveUp,   32)
+            rightInset = 60  -- reserve room so label doesn't overlap arrows
         end
 
         local labelText = spec.label or ""
