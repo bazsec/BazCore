@@ -255,13 +255,13 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
         accent:SetColorTexture(1.00, 0.82, 0.00, 0.95)
 
         -- Thin gold rule along the bottom - chapter-title underline.
-        -- Anchored at x=0 (not inset) so it underlies the left accent
-        -- bar's bottom edge and forms a clean L-corner instead of
-        -- leaving a gap between the two strokes.
+        -- Spans the full width, flush with both the left accent bar
+        -- (clean L-corner, no gap) and the right edge of the dark
+        -- backdrop (no premature termination).
         local rule = headerBtn:CreateTexture(nil, "ARTWORK")
         rule:SetHeight(1)
         rule:SetPoint("BOTTOMLEFT", 0, 0)
-        rule:SetPoint("BOTTOMRIGHT", -4, 0)
+        rule:SetPoint("BOTTOMRIGHT", 0, 0)
         rule:SetColorTexture(1.00, 0.82, 0.00, 0.55)
 
         local hover = headerBtn:CreateTexture(nil, "BACKGROUND", nil, 1)
