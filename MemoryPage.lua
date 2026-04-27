@@ -671,7 +671,7 @@ local function CreateMemEventListWidget(parent, opt, contentWidth)
         end
 
         local events = BazCore:GetMemoryEvents()
-        local hist   = BazCore:GetMemoryHistory and BazCore:GetMemoryHistory() or {}
+        local hist   = BazCore.GetMemoryHistory and BazCore:GetMemoryHistory() or {}
         if #events == 0 then
             empty:Show()
             for _, r in pairs(rowPool) do r:Hide() end
