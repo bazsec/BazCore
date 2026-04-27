@@ -450,12 +450,277 @@ local function CreateMemGraphWidget(parent, opt, contentWidth)
 end
 
 ---------------------------------------------------------------------------
+-- Block: memGrowthList
+--
+-- Per-addon growth-rate readout sourced from BazCore's persistent
+-- memory log. Sorted descending by KB-grown-this-window so the
+-- biggest "leakers" (or just biggest growers) sit at the top.
+-- Refreshes on each Tick, same cadence as the live blocks above.
+---------------------------------------------------------------------------
+
+local GROWTH_WINDOW_SEC = 3600   -- 1 hour
+local MAX_GROWTH_ROWS   = 8
+local GROWTH_ROW_H      = 22
+
+local function CreateMemGrowthListWidget(parent, opt, contentWidth)
+    local headerH    = 22
+    local emptyH     = 22
+    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    frame:SetBackdrop({
+        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+        tile     = true, tileSize = 16, edgeSize = 8,
+        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    frame:SetBackdropColor(0.04, 0.04, 0.06, 0.7)
+    frame:SetBackdropBorderColor(0.4, 0.35, 0.2, 0.85)
+
+    local header = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    header:SetPoint("TOPLEFT", 16, -10)
+    header:SetText("Top growers (last hour)")
+    header:SetTextColor(0.9, 0.9, 0.9)
+
+    local windowLbl = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    windowLbl:SetPoint("TOPRIGHT", -16, -10)
+    windowLbl:SetTextColor(0.55, 0.55, 0.55)
+    windowLbl:SetText("waiting for data...")
+
+    local empty = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    empty:SetPoint("TOPLEFT", 16, -10 - headerH)
+    empty:SetTextColor(0.6, 0.6, 0.6)
+    empty:SetText("Waiting for at least 2 minutes of samples...")
+
+    local rowPool = {}
+    local function AcquireRow(i)
+        local row = rowPool[i]
+        if row then return row end
+        row = CreateFrame("Frame", nil, frame)
+        row:SetSize(contentWidth - 32, GROWTH_ROW_H)
+
+        row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        row.name:SetPoint("LEFT", 0, 0)
+        row.name:SetWidth(160)
+        row.name:SetJustifyH("LEFT")
+
+        row.delta = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        row.delta:SetPoint("LEFT", row.name, "RIGHT", 8, 0)
+        row.delta:SetWidth(110)
+        row.delta:SetJustifyH("RIGHT")
+
+        row.rate = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.rate:SetPoint("LEFT", row.delta, "RIGHT", 8, 0)
+        row.rate:SetWidth(120)
+        row.rate:SetJustifyH("RIGHT")
+        row.rate:SetTextColor(0.7, 0.7, 0.7)
+
+        row.now = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.now:SetPoint("LEFT", row.rate, "RIGHT", 8, 0)
+        row.now:SetJustifyH("RIGHT")
+        row.now:SetTextColor(0.5, 0.5, 0.5)
+
+        rowPool[i] = row
+        return row
+    end
+
+    Subscribe(frame, function()
+        if not BazCore.GetMemoryGrowth then
+            empty:SetText("Memory log not loaded yet.")
+            empty:Show()
+            for _, r in pairs(rowPool) do r:Hide() end
+            frame:SetSize(contentWidth, headerH + emptyH + 16)
+            return
+        end
+
+        local growth, oldestT, latestT = BazCore:GetMemoryGrowth(GROWTH_WINDOW_SEC)
+        if not growth or #growth == 0 then
+            empty:Show()
+            for _, r in pairs(rowPool) do r:Hide() end
+            windowLbl:SetText("waiting for data...")
+            frame:SetSize(contentWidth, headerH + emptyH + 16)
+            return
+        end
+
+        empty:Hide()
+        if oldestT and latestT then
+            local mins = math.max(1, math.floor((latestT - oldestT) / 60))
+            windowLbl:SetText(string.format("over last %d min", mins))
+        end
+
+        local shown = math.min(MAX_GROWTH_ROWS, #growth)
+        local y = -10 - headerH
+        for i = 1, shown do
+            local g   = growth[i]
+            local row = AcquireRow(i)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 16, y)
+            row:Show()
+
+            row.name:SetText(GetAddonDisplayName(g.name))
+            local sign = g.deltaKB >= 0 and "+" or ""
+            row.delta:SetText(string.format("%s%s", sign, FormatKB(math.abs(g.deltaKB))))
+
+            -- Colour: red for noticeable positive growth, green for
+            -- shrinkage (gc'd a chunk), grey near zero.
+            if g.deltaKB > 200 then
+                row.delta:SetTextColor(1.00, 0.50, 0.30)   -- warm amber
+            elseif g.deltaKB > 50 then
+                row.delta:SetTextColor(1.00, 0.85, 0.40)   -- gold
+            elseif g.deltaKB < -50 then
+                row.delta:SetTextColor(0.50, 0.95, 0.50)   -- green
+            else
+                row.delta:SetTextColor(0.65, 0.65, 0.65)   -- neutral
+            end
+
+            row.rate:SetText(string.format("%s%.1f KB/h", sign, math.abs(g.ratePerHour)))
+            row.now:SetText("now " .. FormatKB(g.latestKB))
+            y = y - GROWTH_ROW_H
+        end
+        for i = shown + 1, #rowPool do rowPool[i]:Hide() end
+
+        frame:SetSize(contentWidth, headerH + shown * GROWTH_ROW_H + 20)
+    end)
+
+    -- Initial size before any data; the Subscribe callback fixes it.
+    frame:SetSize(contentWidth, headerH + emptyH + 16)
+    return frame, headerH + MAX_GROWTH_ROWS * GROWTH_ROW_H + 20
+end
+
+---------------------------------------------------------------------------
+-- Block: memEventList
+--
+-- Recent annotated events with the corresponding memory total. Helps
+-- the user correlate "what was happening when this addon spiked" -
+-- combat starts, zone changes, /reloads.
+---------------------------------------------------------------------------
+
+local EVENT_ROW_H = 20
+local MAX_EVENT_ROWS = 10
+
+local EVENT_LABELS = {
+    login        = "|cff8ce0ffLogin|r",
+    reload       = "|cffffd700/reload|r",
+    loading      = "|cffaaaaaaLoading|r",
+    combat_start = "|cffff8c5cCombat start|r",
+    combat_end   = "|cff90ee90Combat end|r",
+    zone         = "|cffd0a8ffZone|r",
+}
+
+local function CreateMemEventListWidget(parent, opt, contentWidth)
+    local headerH = 22
+    local emptyH  = 22
+    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    frame:SetBackdrop({
+        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
+        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+        tile     = true, tileSize = 16, edgeSize = 8,
+        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    frame:SetBackdropColor(0.04, 0.04, 0.06, 0.7)
+    frame:SetBackdropBorderColor(0.4, 0.35, 0.2, 0.85)
+
+    local header = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    header:SetPoint("TOPLEFT", 16, -10)
+    header:SetText("Recent events")
+    header:SetTextColor(0.9, 0.9, 0.9)
+
+    local empty = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    empty:SetPoint("TOPLEFT", 16, -10 - headerH)
+    empty:SetTextColor(0.6, 0.6, 0.6)
+    empty:SetText("No events recorded yet.")
+
+    local rowPool = {}
+    local function AcquireRow(i)
+        local row = rowPool[i]
+        if row then return row end
+        row = CreateFrame("Frame", nil, frame)
+        row:SetSize(contentWidth - 32, EVENT_ROW_H)
+
+        row.tstr = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.tstr:SetPoint("LEFT", 0, 0)
+        row.tstr:SetWidth(70)
+        row.tstr:SetJustifyH("LEFT")
+        row.tstr:SetTextColor(0.55, 0.55, 0.55)
+
+        row.type = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        row.type:SetPoint("LEFT", row.tstr, "RIGHT", 8, 0)
+        row.type:SetWidth(140)
+        row.type:SetJustifyH("LEFT")
+
+        row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.label:SetPoint("LEFT", row.type, "RIGHT", 8, 0)
+        row.label:SetWidth(220)
+        row.label:SetJustifyH("LEFT")
+        row.label:SetTextColor(0.75, 0.75, 0.75)
+        row.label:SetWordWrap(false)
+
+        row.mem = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.mem:SetPoint("RIGHT", 0, 0)
+        row.mem:SetJustifyH("RIGHT")
+        row.mem:SetTextColor(0.55, 0.55, 0.55)
+
+        rowPool[i] = row
+        return row
+    end
+
+    Subscribe(frame, function()
+        if not BazCore.GetMemoryEvents then
+            empty:Show()
+            for _, r in pairs(rowPool) do r:Hide() end
+            frame:SetSize(contentWidth, headerH + emptyH + 16)
+            return
+        end
+
+        local events = BazCore:GetMemoryEvents()
+        local hist   = BazCore:GetMemoryHistory and BazCore:GetMemoryHistory() or {}
+        if #events == 0 then
+            empty:Show()
+            for _, r in pairs(rowPool) do r:Hide() end
+            frame:SetSize(contentWidth, headerH + emptyH + 16)
+            return
+        end
+        empty:Hide()
+
+        -- Build a quick lookup from sample timestamp -> total KB so we
+        -- can show the memory reading at the moment of each event
+        -- without rescanning history per row.
+        local memAt = {}
+        for _, s in ipairs(hist) do memAt[s.t] = s.total end
+
+        -- Walk newest-first (events are stored chronologically; reverse).
+        local count = math.min(MAX_EVENT_ROWS, #events)
+        local y = -10 - headerH
+        for i = 1, count do
+            local e = events[#events - i + 1]
+            local row = AcquireRow(i)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 16, y)
+            row:Show()
+
+            row.tstr:SetText(date("%H:%M:%S", e.t))
+            row.type:SetText(EVENT_LABELS[e.type] or e.type or "?")
+            row.label:SetText(e.label or "")
+            local kb = e.sampleT and memAt[e.sampleT]
+            row.mem:SetText(kb and FormatKB(kb) or "")
+            y = y - EVENT_ROW_H
+        end
+        for i = count + 1, #rowPool do rowPool[i]:Hide() end
+
+        frame:SetSize(contentWidth, headerH + count * EVENT_ROW_H + 20)
+    end)
+
+    frame:SetSize(contentWidth, headerH + emptyH + 16)
+    return frame, headerH + MAX_EVENT_ROWS * EVENT_ROW_H + 20
+end
+
+---------------------------------------------------------------------------
 -- Register the block factories
 ---------------------------------------------------------------------------
 
-O.widgetFactories.memSummary = CreateMemSummaryWidget
-O.widgetFactories.memBarList = CreateMemBarListWidget
-O.widgetFactories.memGraph   = CreateMemGraphWidget
+O.widgetFactories.memSummary    = CreateMemSummaryWidget
+O.widgetFactories.memBarList    = CreateMemBarListWidget
+O.widgetFactories.memGraph      = CreateMemGraphWidget
+O.widgetFactories.memGrowthList = CreateMemGrowthListWidget
+O.widgetFactories.memEventList  = CreateMemEventListWidget
 
 -- Mark the new types as full-width so the layout engine never tries
 -- to pair them in a two-column section.
@@ -463,6 +728,8 @@ if O.RegisterFullWidthBlockType then
     O.RegisterFullWidthBlockType("memSummary")
     O.RegisterFullWidthBlockType("memBarList")
     O.RegisterFullWidthBlockType("memGraph")
+    O.RegisterFullWidthBlockType("memGrowthList")
+    O.RegisterFullWidthBlockType("memEventList")
 end
 
 ---------------------------------------------------------------------------
@@ -478,8 +745,11 @@ local function GetMemoryPage()
                 order = 1,
                 type  = "lead",
                 text  = "Live snapshot of Baz Suite memory consumption. " ..
-                        "Updates twice a second; the graph keeps the last " ..
-                        "60 seconds of total readings.",
+                        "The summary + graph below cover the last 60 " ..
+                        "seconds in real time. The Trends section uses " ..
+                        "the persistent log (one sample per minute, kept " ..
+                        "across /reload) to show longer-term growth and " ..
+                        "what was happening when each addon spiked.",
             },
             summary = {
                 order = 2,
@@ -503,13 +773,34 @@ local function GetMemoryPage()
                 order = 21,
                 type  = "memGraph",
             },
-            actionsHeader = {
+            trendsHeader = {
                 order = 30,
+                type  = "h2",
+                name  = "Trends (persistent log)",
+            },
+            trendsLead = {
+                order = 31,
+                type  = "lead",
+                text  = "Sampled once per minute and persisted to your character DB. " ..
+                        "Survives /reload, so a peak that happens overnight is still " ..
+                        "here in the morning. Use the dump button below to copy the " ..
+                        "full TSV log into chat for offline analysis.",
+            },
+            growthList = {
+                order = 32,
+                type  = "memGrowthList",
+            },
+            eventList = {
+                order = 33,
+                type  = "memEventList",
+            },
+            actionsHeader = {
+                order = 40,
                 type  = "h2",
                 name  = "Actions",
             },
             gcButton = {
-                order = 31,
+                order = 41,
                 type  = "execute",
                 name  = "Force Garbage Collect",
                 desc  = "Runs Lua's garbage collector and triggers an addon-memory snapshot. Useful for confirming a recent action's memory footprint actually freed.",
@@ -519,13 +810,33 @@ local function GetMemoryPage()
                     Tick()
                 end,
             },
-            resetButton = {
-                order = 32,
+            resetPeaksButton = {
+                order = 42,
                 type  = "execute",
                 name  = "Reset Peaks",
                 desc  = "Resets the per-addon peak counters and the total peak to the current values.",
                 width = "half",
                 func  = ResetPeaks,
+            },
+            dumpButton = {
+                order = 43,
+                type  = "execute",
+                name  = "Dump Log to Chat",
+                desc  = "Prints the full persistent memory log (TSV - tab-separated values) to chat. Copy and paste into a spreadsheet for analysis, or share in a bug report. Slash equivalent: /bazmem dump.",
+                width = "half",
+                func  = function()
+                    if BazCore.DumpMemoryLog then BazCore:DumpMemoryLog() end
+                end,
+            },
+            resetLogButton = {
+                order = 44,
+                type  = "execute",
+                name  = "Reset Log",
+                desc  = "Wipes the persistent memory log. Use this before reproducing a memory issue so the log only captures the relevant timeframe.",
+                width = "half",
+                func  = function()
+                    if BazCore.ResetMemoryLog then BazCore:ResetMemoryLog() end
+                end,
             },
         },
     }
