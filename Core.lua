@@ -48,11 +48,19 @@ lifecycleFrame:SetScript("OnEvent", function(self, event)
         loginReady = true
         PhaseMark("login:queue-start (" .. #loginQueue .. " callbacks)")
         for _, entry in ipairs(loginQueue) do
-            local fn    = entry.fn or entry
-            local label = entry.label
-            if label then PhaseMark("login:before-" .. label) end
-            fn()
-            if label then PhaseMark("login:after-" .. label) end
+            -- Two shapes coexist: bare functions (legacy unlabelled
+            -- callers) and { fn, label } tables (new labelled form).
+            -- Type-check before indexing - indexing a function value
+            -- is a Lua error.
+            if type(entry) == "function" then
+                entry()
+            else
+                local fn    = entry.fn
+                local label = entry.label
+                if label then PhaseMark("login:before-" .. label) end
+                fn()
+                if label then PhaseMark("login:after-" .. label) end
+            end
         end
         wipe(loginQueue)
         PhaseMark("login:queue-end")
