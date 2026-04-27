@@ -279,136 +279,27 @@ function BazCore:DumpMemoryLog()
     end
 end
 
----------------------------------------------------------------------------
--- Popup dialog with a scrollable, selectable EditBox of the full CSV.
--- Friendlier export path than the chat dump: paste-ready, no chat-line
--- spam, full content visible at once. Built lazily on first open.
----------------------------------------------------------------------------
-
-local dumpDialog
-
-local function CreateDumpDialog()
-    local f = CreateFrame("Frame", "BazCoreMemoryDumpDialog", UIParent, "BackdropTemplate")
-    f:SetSize(640, 460)
-    f:SetPoint("CENTER")
-    f:SetFrameStrata("DIALOG")
-    f:SetFrameLevel(100)
-    f:SetMovable(true)
-    f:EnableMouse(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop", f.StopMovingOrSizing)
-    f:SetClampedToScreen(true)
-    f:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
-        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile     = true, tileSize = 16, edgeSize = 16,
-        insets   = { left = 5, right = 5, top = 5, bottom = 5 },
-    })
-    f:SetBackdropColor(0.04, 0.04, 0.06, 0.95)
-    f:SetBackdropBorderColor(0.4, 0.35, 0.2, 0.95)
-    f:Hide()
-
-    -- Title
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -14)
-    title:SetText("BazCore Memory Log Export")
-    title:SetTextColor(1, 0.82, 0)
-    f.title = title
-
-    local sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
-    sub:SetText("CSV format. Click |cffffd700Select All|r then press |cffffd700Ctrl+C|r to copy.")
-    sub:SetTextColor(0.75, 0.75, 0.75)
-
-    -- Close X button (top-right)
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", 0, 0)
-    close:SetScript("OnClick", function() f:Hide() end)
-
-    -- Scroll frame containing the EditBox
-    local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 16, -56)
-    scroll:SetPoint("BOTTOMRIGHT", -34, 50)
-
-    local editFrame = CreateFrame("Frame", nil, scroll, "BackdropTemplate")
-    editFrame:SetSize(560, 360)
-    editFrame:SetBackdrop({
-        bgFile = "Interface/Tooltips/UI-Tooltip-Background",
-        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 8,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    editFrame:SetBackdropColor(0, 0, 0, 0.5)
-    editFrame:SetBackdropBorderColor(0.3, 0.25, 0.15, 0.7)
-    scroll:SetScrollChild(editFrame)
-
-    local editBox = CreateFrame("EditBox", nil, editFrame)
-    editBox:SetMultiLine(true)
-    editBox:SetMaxLetters(0)            -- 0 = no limit; large logs need this
-    editBox:SetFontObject("ChatFontNormal")
-    editBox:SetWidth(540)
-    editBox:SetAutoFocus(false)
-    editBox:SetPoint("TOPLEFT", 8, -8)
-    editBox:SetPoint("BOTTOMRIGHT", -8, 8)
-    editBox:SetScript("OnEscapePressed", function() f:Hide() end)
-    -- Re-highlight on click so fresh paste flow stays one-step.
-    editBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
-    f.editBox = editBox
-
-    -- Bottom button row
-    local copyBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    copyBtn:SetSize(120, 24)
-    copyBtn:SetPoint("BOTTOMLEFT", 16, 14)
-    copyBtn:SetText("Select All")
-    copyBtn:SetScript("OnClick", function()
-        editBox:SetFocus()
-        editBox:HighlightText()
-    end)
-
-    local hint = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    hint:SetPoint("LEFT", copyBtn, "RIGHT", 12, 0)
-    hint:SetText("then press |cffffd700Ctrl+C|r to copy")
-    hint:SetTextColor(0.7, 0.7, 0.7)
-
-    local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    closeBtn:SetSize(100, 24)
-    closeBtn:SetPoint("BOTTOMRIGHT", -16, 14)
-    closeBtn:SetText("Close")
-    closeBtn:SetScript("OnClick", function() f:Hide() end)
-
-    -- Stats (sample count, char count) above the buttons
-    local stats = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    stats:SetPoint("BOTTOMLEFT", 16, 38)
-    stats:SetTextColor(0.55, 0.55, 0.55)
-    f.stats = stats
-
-    -- ESC closes (and free up its slot if multiple dialogs use this).
-    table.insert(UISpecialFrames, "BazCoreMemoryDumpDialog")
-
-    return f
-end
-
 -- OpenMemoryDumpDialog()
---   Opens (or rebuilds the content of) the export dialog. If the log
---   is empty, surfaces a helpful chat message instead of an empty
---   popup so the user understands what to do.
+--   Opens (or rebuilds the content of) the export dialog. The dialog
+--   itself lives in CopyDialog.lua and is reusable by any addon that
+--   wants a paste-friendly export popup; we just hand it our content.
 function BazCore:OpenMemoryDumpDialog()
     local content, sampleCount = BuildDumpString()
     if not content then
         print("|cffffd700BazCore:|r memory log is empty - wait for the first sample (samples are taken every minute).")
         return
     end
-
-    if not dumpDialog then dumpDialog = CreateDumpDialog() end
-
-    dumpDialog.editBox:SetText(content)
-    dumpDialog.stats:SetText(string.format("%d sample(s) | %d characters",
-        sampleCount, #content))
-    dumpDialog:Show()
-    dumpDialog:Raise()
-    dumpDialog.editBox:SetFocus()
-    dumpDialog.editBox:HighlightText()
+    if not BazCore.OpenCopyDialog then
+        -- Fall back to chat dump if CopyDialog isn't loaded.
+        return self:DumpMemoryLog()
+    end
+    BazCore:OpenCopyDialog({
+        title    = "BazCore Memory Log Export",
+        subtitle = "CSV format. Click Select All then Ctrl+C to copy.",
+        content  = content,
+        stats    = string.format("%d sample(s) | %d characters",
+                                 sampleCount, #content),
+    })
 end
 
 -- ResetMemoryLog()
