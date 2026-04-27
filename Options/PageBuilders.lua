@@ -315,6 +315,19 @@ end
 --                        --   Same pattern as onCreate; surfaces a Reset button
 --                        --   below Create.
 --   resetButtonText,     -- optional, defaults to "Reset to Defaults".
+--
+--   onMoveUp,            -- optional (item) -> ()
+--   onMoveDown,          -- optional (item) -> ()
+--                        --   When set, every row in the left list gets up /
+--                        --   down arrow buttons on its right edge. Topmost
+--                        --   and bottommost rows render their boundary arrow
+--                        --   greyed out so the affordance is still visible.
+--                        --   The callback receives the same `item` object
+--                        --   getItems returned, so the caller can swap order
+--                        --   with the adjacent neighbour and refresh. Replaces
+--                        --   the "Order" range slider pattern - much less
+--                        --   convoluted than asking users to type values
+--                        --   between two existing orders.
 -- }
 ---------------------------------------------------------------------------
 
@@ -412,14 +425,36 @@ function BazCore:CreateManagedListPage(addonName, config)
                 name   = itemName,
                 source = item.source,
                 args   = detailArgs,
+                -- Stash the original item so the row's move handlers
+                -- can hand it back to config.onMoveUp/onMoveDown - the
+                -- inner group is what BuildListDetailPanel sees, not
+                -- the original getItems() entry.
+                _item  = item,
             }
         end
 
+        -- Wrap the caller's per-item onMove* hooks so they always
+        -- receive the original `item` object, not the inner wrapper
+        -- group BuildListDetailPanel passes around. Keeps the public
+        -- API symmetric with buildDetail (also gets the item).
+        local wrappedMoveUp = config.onMoveUp and function(childGroup)
+            if childGroup and childGroup._item then
+                config.onMoveUp(childGroup._item)
+            end
+        end or nil
+        local wrappedMoveDown = config.onMoveDown and function(childGroup)
+            if childGroup and childGroup._item then
+                config.onMoveDown(childGroup._item)
+            end
+        end or nil
+
         args.items = {
-            order = 10,
-            type  = "group",
-            name  = "",      -- empty so no header renders above the list/detail
-            args  = itemArgs,
+            order      = 10,
+            type       = "group",
+            name       = "",      -- empty so no header renders above the list/detail
+            args       = itemArgs,
+            onMoveUp   = wrappedMoveUp,
+            onMoveDown = wrappedMoveDown,
         }
 
         return {

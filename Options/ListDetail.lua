@@ -222,15 +222,33 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
             end
         else
             -- Flat list (legacy behaviour for pages without source-tagged
-            -- children, e.g. Drawers).
-            for _, child in ipairs(childGroups) do
+            -- children, e.g. Drawers, Categories). When the wrapper
+            -- group exposes onMoveUp / onMoveDown callbacks, every row
+            -- gets up/down arrow buttons on the right edge - the topmost
+            -- and bottommost rows render their boundary arrow disabled
+            -- so users still see the affordance but can't move past
+            -- the list edge. Pages without ordering simply don't set
+            -- the callbacks and no arrows render.
+            local total      = #childGroups
+            local onMoveUp   = groupOpt.onMoveUp
+            local onMoveDown = groupOpt.onMoveDown
+            for idx, child in ipairs(childGroups) do
                 local capturedChild = child
+                local moveUp, moveDown
+                if onMoveUp and idx > 1 then
+                    moveUp = function() onMoveUp(capturedChild) end
+                end
+                if onMoveDown and idx < total then
+                    moveDown = function() onMoveDown(capturedChild) end
+                end
                 rows[#rows + 1] = {
                     key        = capturedChild.name,
                     label      = capturedChild.name or "?",
                     isParent   = false,
                     isSelected = (capturedChild.name == selectedKey),
                     onClick    = function() SelectGroup(capturedChild) end,
+                    moveUp     = moveUp,
+                    moveDown   = moveDown,
                 }
             end
         end

@@ -222,6 +222,11 @@ O.SECTION_HEADER_HEIGHT = (O.LIST_ITEM_HEIGHT or 28) + 4
 --     depth      = optional indentation level (0 = flush left).
 --     indent     = optional extra pixels of indent on top of depth.
 --     onClick    = function() called on left-click.
+--     moveUp     = optional function() - when set, paints a small up
+--                  arrow button at the right edge of the row. Pass nil
+--                  on the topmost row so the arrow renders disabled.
+--     moveDown   = optional function() - mirror of moveUp; nil on the
+--                  bottommost row to render disabled.
 --   }
 --
 -- opts:
@@ -294,13 +299,47 @@ function O.RenderListRows(listContent, rows, opts)
             indent = indent + 16
         end
 
+        -- Move-up / move-down arrows on the right edge. Rendered as
+        -- child Buttons so clicking an arrow doesn't trigger the row's
+        -- OnClick. A nil callback on either side draws the arrow
+        -- disabled (greyed out, non-clickable) so the user still sees
+        -- the affordance but understands they're at a list boundary.
+        -- Only emitted when the spec sets either callback - rows
+        -- without ordering (User Manual tree, source headers) skip
+        -- the arrows entirely so the right edge stays clean.
+        local rightInset = 4
+        if spec.moveUp ~= nil or spec.moveDown ~= nil then
+            local function MakeArrow(textureUp, callback, anchorRight)
+                local btn = CreateFrame("Button", nil, row)
+                btn:SetSize(14, 14)
+                btn:SetPoint("RIGHT", -anchorRight, 0)
+                local tex = btn:CreateTexture(nil, "OVERLAY")
+                tex:SetAllPoints()
+                tex:SetTexture(textureUp)
+                if callback then
+                    btn:SetScript("OnClick", function() callback() end)
+                    btn:SetScript("OnEnter", function() tex:SetVertexColor(1, 1, 1) end)
+                    btn:SetScript("OnLeave", function() tex:SetVertexColor(unpack(O.GOLD)) end)
+                    tex:SetVertexColor(unpack(O.GOLD))
+                else
+                    btn:EnableMouse(false)
+                    tex:SetVertexColor(0.4, 0.4, 0.4)
+                end
+                return btn
+            end
+            -- Down arrow sits flush to the right, up arrow to its left.
+            MakeArrow("Interface\\Buttons\\Arrow-Down-Up", spec.moveDown, 6)
+            MakeArrow("Interface\\Buttons\\Arrow-Up-Up",   spec.moveUp,   24)
+            rightInset = 44  -- reserve room so label doesn't overlap arrows
+        end
+
         local labelText = spec.label or ""
         if spec.count then
             labelText = labelText .. "  |cff888888(" .. spec.count .. ")|r"
         end
         local text = row:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
         text:SetPoint("LEFT", indent, 0)
-        text:SetPoint("RIGHT", -4, 0)
+        text:SetPoint("RIGHT", -rightInset, 0)
         text:SetJustifyH("LEFT")
         text:SetText(labelText)
         if isSelected then
