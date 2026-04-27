@@ -336,15 +336,21 @@ function BazCore:MarkMemoryEvent(evType, label)
     PushEvent(evType or "mark", label)
 end
 
--- WatchMemory(durationSec, intervalSec)
+-- WatchMemory(durationSec, intervalSec, opts)
 --   Switches to high-frequency sampling for `durationSec` seconds, at
 --   `intervalSec` cadence (default 2 s). Useful for catching transient
 --   spikes that the per-minute ticker glosses over - the user invokes
 --   this right before reproducing the issue.
+--
+--   opts.onComplete = optional fn() fired when the watch finishes
+--       naturally (not when cancelled). Used by /bazmem armwatch to
+--       auto-open the export popup so the user can paste the dump
+--       without remembering an extra slash command.
 local watchTicker
-function BazCore:WatchMemory(durationSec, intervalSec)
+function BazCore:WatchMemory(durationSec, intervalSec, opts)
     durationSec = tonumber(durationSec) or 60
     intervalSec = tonumber(intervalSec) or 2
+    opts = opts or {}
     if watchTicker then watchTicker:Cancel() end
 
     local started = GetTime()
@@ -356,6 +362,9 @@ function BazCore:WatchMemory(durationSec, intervalSec)
             PushEvent("watch_end")
             self:Cancel()
             watchTicker = nil
+            if opts.onComplete then
+                pcall(opts.onComplete)
+            end
         end
     end)
 end
@@ -384,6 +393,40 @@ boot:SetScript("OnEvent", function(self, event, ...)
         Restore()
         if C_Timer and C_Timer.NewTicker then
             C_Timer.NewTicker(SAMPLE_INTERVAL, Snapshot)
+        end
+
+        -- Honour any pending /bazmem armwatch the user set before the
+        -- last /reload. SavedVariables persist across reload, so a
+        -- flag stored here survives the unload+reload cycle and we
+        -- can pick it up on the very first sample after login.
+        local pending = BazCoreDB and BazCoreDB.memLogPendingWatch
+        if pending then
+            BazCoreDB.memLogPendingWatch = nil  -- consume; one-shot per arm
+            local secs    = tonumber(pending.secs)        or 30
+            local cadence = tonumber(pending.intervalSec) or 2
+            -- Run shortly after PLAYER_LOGIN so the rest of the suite
+            -- has finished its own login work (registrations, queued
+            -- callbacks). 0.1s is enough buffer; the watch then runs
+            -- before the user can realistically open the panel.
+            C_Timer.After(0.1, function()
+                PushEvent("armwatch_fire",
+                    string.format("auto: %ds @ %.1fs", secs, cadence))
+                if BazCore.WatchMemory then
+                    BazCore:WatchMemory(secs, cadence, {
+                        -- When the watch ends, pop the export dialog
+                        -- straight away so the user doesn't have to
+                        -- remember /bazmem export. Skip if their UI
+                        -- isn't visible (taxi flight, etc.) - they'd
+                        -- rather see it next time.
+                        onComplete = function()
+                            if BazCore.OpenMemoryDumpDialog then
+                                BazCore:OpenMemoryDumpDialog()
+                                print("|cffffd700BazCore:|r armed watch finished. Memory log popped open for export.")
+                            end
+                        end,
+                    })
+                end
+            end)
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
         local isInitial, isReload = ...
@@ -443,9 +486,39 @@ SlashCmdList.BAZMEM = function(msg)
     if lcmd == "watch" then
         local secs = tonumber(rest:match("^(%d+)")) or 60
         local cadence = tonumber(rest:match("@(%d+%.?%d*)")) or 2
-        BazCore:WatchMemory(secs, cadence)
-        print(string.format("|cffffd700BazCore:|r sampling every %.1fs for %ds. Reproduce the issue now; results land in the log.",
+        BazCore:WatchMemory(secs, cadence, {
+            -- Manual /bazmem watch also pops the export dialog when
+            -- it finishes - same convenience as armwatch.
+            onComplete = function()
+                if BazCore.OpenMemoryDumpDialog then
+                    BazCore:OpenMemoryDumpDialog()
+                    print("|cffffd700BazCore:|r watch finished. Memory log popped open for export.")
+                end
+            end,
+        })
+        print(string.format("|cffffd700BazCore:|r sampling every %.1fs for %ds. Reproduce the issue now; popup will open when done.",
             cadence, secs))
+        return
+    end
+    if lcmd == "armwatch" then
+        local secs = tonumber(rest:match("^(%d+)")) or 30
+        local cadence = tonumber(rest:match("@(%d+%.?%d*)")) or 2
+        if not BazCoreDB then
+            print("|cffffd700BazCore:|r DB not ready yet - try after /reload.")
+            return
+        end
+        BazCoreDB.memLogPendingWatch = { secs = secs, intervalSec = cadence }
+        print(string.format("|cffffd700BazCore:|r watch armed - will sample every %.1fs for %ds starting right after your next /reload, then pop the export popup. Type |cffffd700/bazmem disarm|r to cancel.",
+            cadence, secs))
+        return
+    end
+    if lcmd == "disarm" then
+        if BazCoreDB and BazCoreDB.memLogPendingWatch then
+            BazCoreDB.memLogPendingWatch = nil
+            print("|cffffd700BazCore:|r armed watch cancelled.")
+        else
+            print("|cffffd700BazCore:|r no armed watch to cancel.")
+        end
         return
     end
 
@@ -462,9 +535,11 @@ SlashCmdList.BAZMEM = function(msg)
             g.name, sign, g.deltaKB, sign, g.ratePerHour, g.latestKB))
     end
     print("|cffffd700Commands:|r")
-    print("  |cffffd700/bazmem mark <label>|r  - tag an event in the log")
-    print("  |cffffd700/bazmem watch <secs>|r  - sample every 2s for a burst")
-    print("  |cffffd700/bazmem export|r        - popup CSV (paste-friendly)")
-    print("  |cffffd700/bazmem dump|r          - chat CSV (quick scan)")
-    print("  |cffffd700/bazmem reset|r         - clear log")
+    print("  |cffffd700/bazmem mark <label>|r     - tag an event in the log")
+    print("  |cffffd700/bazmem watch <secs>|r     - sample every 2s for a burst, popup at end")
+    print("  |cffffd700/bazmem armwatch <secs>|r  - watch fires AFTER next /reload (catches first-open)")
+    print("  |cffffd700/bazmem disarm|r           - cancel an armed watch")
+    print("  |cffffd700/bazmem export|r           - popup CSV (paste-friendly)")
+    print("  |cffffd700/bazmem dump|r             - chat CSV (quick scan)")
+    print("  |cffffd700/bazmem reset|r            - clear log")
 end
