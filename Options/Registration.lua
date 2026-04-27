@@ -379,6 +379,7 @@ local function SelectSubcategory(key)
     -- "User Manual click was the spike trigger" type insights.
     if BazCore.MarkMemoryEvent then
         BazCore:MarkMemoryEvent("subcat_select", key)
+        BazCore:MarkMemoryEvent("phase", "subcat:" .. tostring(key) .. ":start")
     end
 
     -- Update sidebar highlights. Uses the same gold-gradient
@@ -406,14 +407,32 @@ local function SelectSubcategory(key)
     -- A customRender function takes full control of the content panel.
     -- Used by the User Manual to render its own tree-based layout.
     if type(entry.customRender) == "function" then
+        if BazCore.MarkMemoryEvent then
+            BazCore:MarkMemoryEvent("phase", "subcat:" .. key .. ":before-customRender")
+        end
         entry.customRender(window.content)
+        if BazCore.MarkMemoryEvent then
+            BazCore:MarkMemoryEvent("phase", "subcat:" .. key .. ":after-customRender")
+        end
         return
     end
 
+    if BazCore.MarkMemoryEvent then
+        BazCore:MarkMemoryEvent("phase", "subcat:" .. key .. ":before-funcEval")
+    end
     local tbl = entry.func
     if type(tbl) == "function" then tbl = tbl() end
+    if BazCore.MarkMemoryEvent then
+        BazCore:MarkMemoryEvent("phase", "subcat:" .. key .. ":after-funcEval")
+    end
     if tbl then
+        if BazCore.MarkMemoryEvent then
+            BazCore:MarkMemoryEvent("phase", "subcat:" .. key .. ":before-RenderIntoCanvas")
+        end
         RenderIntoCanvas(window.content, tbl)
+        if BazCore.MarkMemoryEvent then
+            BazCore:MarkMemoryEvent("phase", "subcat:" .. key .. ":after-RenderIntoCanvas")
+        end
     end
 end
 
@@ -704,9 +723,27 @@ function BazCore:AddToSettings(addonName, displayName, parentName)
     end
 end
 
+-- Helper: bracket a function call with memory-log phase markers so a
+-- /bazmem watch dump shows the exact KB allocated by each construction
+-- step (EnsureWindow, RenderBottomTabs, SelectAddon, ...). The markers
+-- only fire when MemoryLog is loaded, so they're safe to leave in
+-- production (they're cheap and useful for users reporting hitches).
+local function PhaseMark(label)
+    if BazCore.MarkMemoryEvent then
+        BazCore:MarkMemoryEvent("phase", label)
+    end
+end
+
 function BazCore:OpenOptionsPanel(addonName)
+    PhaseMark("open:start")
+
+    PhaseMark("open:before-EnsureWindow")
     EnsureWindow()
+    PhaseMark("open:after-EnsureWindow")
+
+    PhaseMark("open:before-RenderBottomTabs")
     RenderBottomTabs()
+    PhaseMark("open:after-RenderBottomTabs")
 
     -- Figure out which top-level addon to activate.
     -- If addonName is a sub-category, switch to its parent first, then select the sub-category.
@@ -726,13 +763,22 @@ function BazCore:OpenOptionsPanel(addonName)
         end
     end
 
+    PhaseMark("open:before-SelectAddon=" .. tostring(topLevel))
     SelectAddon(topLevel)
+    PhaseMark("open:after-SelectAddon")
+
     if subcategory then
+        PhaseMark("open:before-SelectSubcategory=" .. tostring(subcategory))
         SelectSubcategory(subcategory)
+        PhaseMark("open:after-SelectSubcategory")
     end
 
+    PhaseMark("open:before-Show")
     window:Show()
     window:Raise()
+    PhaseMark("open:after-Show")
+
+    PhaseMark("open:end")
 end
 
 function BazCore:RefreshOptions(addonName)
