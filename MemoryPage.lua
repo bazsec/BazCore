@@ -784,7 +784,7 @@ local function GetMemoryPage()
                 text  = "Sampled once per minute and persisted to your character DB. " ..
                         "Survives /reload, so a peak that happens overnight is still " ..
                         "here in the morning. Use the dump button below to copy the " ..
-                        "full TSV log into chat for offline analysis.",
+                        "full CSV log into chat for offline analysis.",
             },
             growthList = {
                 order = 32,
@@ -822,7 +822,7 @@ local function GetMemoryPage()
                 order = 43,
                 type  = "execute",
                 name  = "Dump Log to Chat",
-                desc  = "Prints the full persistent memory log (TSV - tab-separated values) to chat. Copy and paste into a spreadsheet for analysis, or share in a bug report. Slash equivalent: /bazmem dump.",
+                desc  = "Prints the full persistent memory log (CSV - comma-separated values) to chat. Copy and paste into a spreadsheet for analysis, or share in a bug report. Slash equivalent: /bazmem dump.",
                 width = "half",
                 func  = function()
                     if BazCore.DumpMemoryLog then BazCore:DumpMemoryLog() end

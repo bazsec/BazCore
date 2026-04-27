@@ -200,8 +200,11 @@ function BazCore:GetMemoryGrowth(windowSec)
 end
 
 -- DumpMemoryLog()
---   Prints the log to chat as TSV (timestamp, total, per-addon...).
---   Useful for paste-into-spreadsheet analysis. Headers come first.
+--   Prints the log to chat as CSV (timestamp, total, per-addon...).
+--   Comma-separated rather than tab-separated because WoW's chat frame
+--   doesn't render \t as spacing - it substitutes a glyph, which makes
+--   tabs unreadable in chat. CSV pastes cleanly into spreadsheets too.
+--   Label fields that might contain a comma (zone names) are quoted.
 function BazCore:DumpMemoryLog()
     local hist = self:GetMemoryHistory()
     if #hist == 0 then
@@ -209,7 +212,7 @@ function BazCore:DumpMemoryLog()
         return
     end
 
-    -- Collect every addon name across the history so the TSV columns
+    -- Collect every addon name across the history so the CSV columns
     -- line up even when an addon was registered partway through.
     local nameSet, nameList = {}, {}
     for _, s in ipairs(hist) do
@@ -222,28 +225,39 @@ function BazCore:DumpMemoryLog()
     end
     table.sort(nameList)
 
-    print("|cffffd700BazCore Memory Log:|r " .. #hist .. " sample(s). Copy lines below into a spreadsheet (TSV):")
+    -- Quote a CSV field if it could break parsing - i.e. contains a
+    -- comma or quote. Numbers and timestamps go through as-is.
+    local function CsvField(v)
+        if v == nil then return "" end
+        local s = tostring(v)
+        if s:find('[",]') then
+            return '"' .. s:gsub('"', '""') .. '"'
+        end
+        return s
+    end
+
+    print("|cffffd700BazCore Memory Log:|r " .. #hist .. " sample(s). Copy lines below into a spreadsheet (CSV):")
 
     local header = { "time", "total_kb" }
     for _, n in ipairs(nameList) do header[#header + 1] = n end
-    print(table.concat(header, "\t"))
+    print(table.concat(header, ","))
 
     for _, s in ipairs(hist) do
         local row = { date("%Y-%m-%d %H:%M:%S", s.t), string.format("%.0f", s.total) }
         for _, n in ipairs(nameList) do
             row[#row + 1] = string.format("%.0f", s.addons[n] or 0)
         end
-        print(table.concat(row, "\t"))
+        print(table.concat(row, ","))
     end
 
     local events = self:GetMemoryEvents()
     if #events > 0 then
-        print("|cffffd700Events|r (time\ttype\tlabel):")
+        print("|cffffd700Events|r (time,type,label):")
         for _, e in ipairs(events) do
-            print(string.format("%s\t%s\t%s",
+            print(string.format("%s,%s,%s",
                 date("%Y-%m-%d %H:%M:%S", e.t),
-                e.type or "",
-                e.label or ""))
+                CsvField(e.type),
+                CsvField(e.label)))
         end
     end
 end
