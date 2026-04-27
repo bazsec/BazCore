@@ -223,30 +223,60 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
     local RenderList  -- forward declaration so the section-header click can call it
 
-    -- Builds a clickable section header with the same Blizzard
-    -- plus/minus toggle textures the User Manual tree uses, so the
-    -- two collapsible-list patterns in BazCore feel consistent.
+    -- Section headers are slightly taller than item rows so the
+    -- chapter-title backdrop has room to breathe.
+    local SECTION_HEADER_H = O.LIST_ITEM_HEIGHT + 4
+
+    -- Builds a clickable section header. Visually distinct from the
+    -- item rows below it so the user reads it as a chapter divider:
+    --   * darker warm-toned backdrop fill across the row
+    --   * thicker gold accent bar on the left edge
+    --   * thin gold rule along the bottom (chapter-title style)
+    --   * slightly taller than item rows
+    --   * uppercased label so it reads as a heading even at the same font
+    -- Uses the same plus/minus toggle textures the User Manual tree
+    -- uses, so the two collapsible-list patterns feel consistent.
     local function BuildSectionHeader(source, count, listY)
         local headerBtn = CreateFrame("Button", nil, listContent)
-        headerBtn:SetSize(listW - 26, O.LIST_ITEM_HEIGHT)
+        headerBtn:SetSize(listW - 26, SECTION_HEADER_H)
         headerBtn:SetPoint("TOPLEFT", 0, -listY)
 
-        local hover = headerBtn:CreateTexture(nil, "BACKGROUND")
+        -- Warm-toned dark fill so the header reads as a separate band.
+        local bg = headerBtn:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.12, 0.09, 0.04, 0.65)
+
+        -- Left-edge gold accent bar (thicker than the bottom rule so
+        -- the eye picks up the heading immediately when scanning).
+        local accent = headerBtn:CreateTexture(nil, "ARTWORK")
+        accent:SetWidth(3)
+        accent:SetPoint("TOPLEFT", 0, 0)
+        accent:SetPoint("BOTTOMLEFT", 0, 0)
+        accent:SetColorTexture(1.00, 0.82, 0.00, 0.95)
+
+        -- Thin gold rule along the bottom — chapter-title underline.
+        local rule = headerBtn:CreateTexture(nil, "ARTWORK")
+        rule:SetHeight(1)
+        rule:SetPoint("BOTTOMLEFT", 6, 0)
+        rule:SetPoint("BOTTOMRIGHT", -4, 0)
+        rule:SetColorTexture(1.00, 0.82, 0.00, 0.55)
+
+        local hover = headerBtn:CreateTexture(nil, "BACKGROUND", nil, 1)
         hover:SetAllPoints()
-        hover:SetColorTexture(1, 1, 1, 0.05)
+        hover:SetColorTexture(1, 0.82, 0, 0.10)
         hover:Hide()
 
         local collapsed = container._collapsedSources[source] or false
         local arrow = headerBtn:CreateTexture(nil, "OVERLAY")
         arrow:SetSize(14, 14)
-        arrow:SetPoint("LEFT", 6, 0)
+        arrow:SetPoint("LEFT", 8, 0)
         arrow:SetTexture(collapsed
             and "Interface\\Buttons\\UI-PlusButton-Up"
             or  "Interface\\Buttons\\UI-MinusButton-Up")
 
         local label = headerBtn:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
         label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
-        label:SetText(source .. "  |cff888888(" .. count .. ")|r")
+        label:SetText(source:upper() .. "  |cff888888(" .. count .. ")|r")
         label:SetTextColor(unpack(O.GOLD))
 
         headerBtn:SetScript("OnEnter", function() hover:Show() end)
@@ -280,10 +310,10 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
             for _, src in ipairs(sourceOrder) do
                 BuildSectionHeader(src, #bySource[src], listY)
-                listY = listY + O.LIST_ITEM_HEIGHT
+                listY = listY + SECTION_HEADER_H
                 if not container._collapsedSources[src] then
                     for _, child in ipairs(bySource[src]) do
-                        BuildChildRow(child, listY, 22)  -- indented under header
+                        BuildChildRow(child, listY, 26)  -- nested under header
                         listY = listY + O.LIST_ITEM_HEIGHT
                     end
                 end
