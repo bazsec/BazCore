@@ -308,60 +308,52 @@ function O.RenderListRows(listContent, rows, opts)
         -- without ordering (User Manual tree, source headers) skip
         -- the arrows entirely so the right edge stays clean.
         --
-        -- Style: same atlas Blizzard uses for WowStyle1ArrowDropdown
-        -- (the chevron-button on the FriendsFrame status dropdown).
-        -- common-dropdown-a-button is a COMPLETE button graphic - chrome
-        -- + chevron baked together - so we use it as the whole button
-        -- with no extra backdrop (which is what produced the
-        -- "button-in-button" look earlier). Blizzard's mixin swaps
-        -- atlas variants for hover / pressed / disabled, mirrored here.
+        -- Style: custom 32x32 PNGs (one set per direction) under
+        -- Textures/Sort_Arrows/. Each direction has Normal/Hover/Pressed
+        -- variants; disabled state is the Normal texture greyed via
+        -- vertex colour. Drawing both directions explicitly (instead of
+        -- rotating one) keeps any baked-in gloss / shading naturally
+        -- oriented and avoids the asymmetry-under-rotation issues we
+        -- had with common-dropdown-a-button.
+        local SORT_ARROW_PATH = "Interface\\AddOns\\BazCore\\Textures\\Sort_Arrows\\"
         local rightInset = 4
         if spec.moveUp ~= nil or spec.moveDown ~= nil then
-            local function MakeArrow(rotation, callback, anchorRight)
+            local function MakeArrow(direction, callback, anchorRight)
                 local btn = CreateFrame("Button", nil, row)
                 btn:SetSize(22, 22)
                 btn:SetPoint("RIGHT", -anchorRight, 0)
+                local prefix = SORT_ARROW_PATH .. direction .. "_"
                 local tex = btn:CreateTexture(nil, "ARTWORK")
-                tex:SetSize(22, 22)
-                -- Blizzard's WowStyle1ArrowDropdownTemplate XML anchors
-                -- the texture at CENTER y=-2 because the chevron isn't
-                -- pixel-centered in the atlas - it sits slightly low.
-                -- When we rotate 180 for the up arrow, that asymmetry
-                -- flips, so the up texture needs y=+2 to keep its
-                -- chevron in the same visual spot. Without this the
-                -- two buttons in a row look vertically offset.
-                tex:SetPoint("CENTER", 0, (rotation == 0) and -2 or 2)
-                tex:SetAtlas("common-dropdown-a-button")
-                tex:SetRotation(rotation)
+                tex:SetAllPoints()
+                tex:SetTexture(prefix .. "Normal.png")
                 btn.tex = tex
+                btn._prefix = prefix
                 if callback then
                     btn:RegisterForClicks("LeftButtonUp")
                     btn:SetScript("OnClick", function() callback() end)
                     btn:SetScript("OnEnter", function(self)
-                        self.tex:SetAtlas("common-dropdown-a-button-hover")
+                        self.tex:SetTexture(self._prefix .. "Hover.png")
                     end)
                     btn:SetScript("OnLeave", function(self)
-                        self.tex:SetAtlas("common-dropdown-a-button")
+                        self.tex:SetTexture(self._prefix .. "Normal.png")
                     end)
                     btn:SetScript("OnMouseDown", function(self)
-                        self.tex:SetAtlas("common-dropdown-a-button-pressed")
+                        self.tex:SetTexture(self._prefix .. "Pressed.png")
                     end)
                     btn:SetScript("OnMouseUp", function(self)
-                        self.tex:SetAtlas(self:IsMouseOver()
-                            and "common-dropdown-a-button-hover"
-                            or  "common-dropdown-a-button")
+                        self.tex:SetTexture(self._prefix
+                            .. (self:IsMouseOver() and "Hover" or "Normal")
+                            .. ".png")
                     end)
                 else
                     btn:EnableMouse(false)
-                    tex:SetAtlas("common-dropdown-a-button-disabled")
+                    tex:SetVertexColor(0.4, 0.4, 0.4, 0.55)
                 end
                 return btn
             end
-            -- Down arrow flush to the right (no rotation - the atlas
-            -- points down by default since dropdowns open downward),
-            -- up arrow rotated 180 to its left.
-            MakeArrow(0,       spec.moveDown, 6)
-            MakeArrow(math.pi, spec.moveUp,   32)
+            -- Down arrow flush to the right; up arrow to its left.
+            MakeArrow("Down", spec.moveDown, 6)
+            MakeArrow("Up",   spec.moveUp,   32)
             rightInset = 60  -- reserve room so label doesn't overlap arrows
         end
 
