@@ -100,36 +100,139 @@ local function CreateRangeWidget(parent, opt, contentWidth)
     local label = frame:CreateFontString(nil, "OVERLAY", O.LABEL_FONT)
     label:SetPoint("TOPLEFT", 0, 0)
 
+    local minVal = opt.min or 0
+    local maxVal = opt.max or 100
+    local step = opt.step or 1
+
     local function FormatValue(val)
         if opt.isPercent then return math.floor((val or 0) * 100) .. "%" end
         if opt.format then return string.format(opt.format, val or 0) end
-        local step = opt.step or 1
         if step < 1 then return string.format("%.1f", val or 0) end
         return tostring(math.floor(val or 0))
     end
 
-    local val = opt.get and opt.get() or opt.min or 0
+    local val = opt.get and opt.get() or minVal
+    -- Label keeps the "name: value" format so a glance down the page
+    -- reads naturally even when the editbox is collapsed/out of focus.
     label:SetText((opt.name or "") .. ": " .. FormatValue(val))
+
+    -- Reserve right-edge space for the editable value box so the
+    -- slider doesn't fight it for clicks. Width fits "100%" or 4 digits.
+    local EDITBOX_W = 56
 
     local slider = CreateFrame("Frame", nil, frame, "MinimalSliderWithSteppersTemplate")
     slider:SetPoint("TOPLEFT", 0, -22)
-    slider:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-    slider:SetHeight(20)
-
-    local minVal = opt.min or 0
-    local maxVal = opt.max or 100
-    local step = opt.step or 1
-    local steps = math.max(1, math.floor((maxVal - minVal) / step))
+    slider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -EDITBOX_W - 12, -22)
+    -- 24px (was 20) gives a friendlier vertical hit area for the
+    -- diamond thumb in MinimalSliderWithSteppersTemplate.
+    slider:SetHeight(24)
 
     slider.Slider:SetMinMaxValues(minVal, maxVal)
     slider.Slider:SetValueStep(step)
     slider.Slider:SetObeyStepOnDrag(true)
     slider.Slider:SetValue(val)
 
+    -- Click-anywhere-to-snap overlay.
+    --
+    -- MinimalSliderWithSteppersTemplate decides drag-vs-track-click by
+    -- hit-testing the cursor against the thumb texture's exact rect.
+    -- That rect is small (~16x16) and clicks landing on what visually
+    -- looks like the thumb often miss it, getting routed as page-step
+    -- clicks instead — so the slider feels ungrabbable on long ranges.
+    --
+    -- This invisible button covers the entire trough. Mouse-down sets
+    -- the slider value to the cursor's fractional position, then
+    -- OnUpdate keeps tracking the cursor until release. Net effect:
+    -- click anywhere -> snap there + drag from there, like every
+    -- modern slider widget. Steppers (slider.Back / slider.Forward)
+    -- live outside the overlay's bounds and keep working.
+    local overlay = CreateFrame("Button", nil, slider.Slider)
+    overlay:SetAllPoints()
+    overlay:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+
+    local dragging = false
+    local function ValueAtCursor()
+        local cx = GetCursorPosition() / overlay:GetEffectiveScale()
+        local left = overlay:GetLeft() or 0
+        local width = overlay:GetWidth() or 1
+        local frac = (cx - left) / width
+        if frac < 0 then frac = 0 end
+        if frac > 1 then frac = 1 end
+        return minVal + frac * (maxVal - minVal)
+    end
+
+    overlay:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
+        dragging = true
+        slider.Slider:SetValue(ValueAtCursor())
+        self:SetScript("OnUpdate", function()
+            if dragging then slider.Slider:SetValue(ValueAtCursor()) end
+        end)
+    end)
+    overlay:SetScript("OnMouseUp", function(self)
+        if not dragging then return end
+        dragging = false
+        self:SetScript("OnUpdate", nil)
+        -- Commit the final value. OnValueChanged below skips opt.set
+        -- while `dragging` is true, so the setter fires exactly once
+        -- per drag here on release — important for setters with
+        -- expensive side effects (Categories.Reorder rebuilds the bag).
+        if opt.set then
+            local v = math.floor(slider.Slider:GetValue() / step + 0.5) * step
+            opt.set(nil, v)
+        end
+    end)
+    overlay:SetScript("OnHide", function(self)
+        dragging = false
+        self:SetScript("OnUpdate", nil)
+    end)
+
+    -- Editable value box on the right. Bypasses slider precision for
+    -- ranges where the user knows the exact value they want (e.g.
+    -- Order = 36). Slider OnValueChanged keeps the box in sync; the
+    -- box's commit writes through SetValue so the standard set()
+    -- chain fires from one place only.
+    local valueBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    valueBox:SetPoint("LEFT", slider, "RIGHT", 16, 0)
+    valueBox:SetSize(EDITBOX_W - 8, 22)
+    valueBox:SetAutoFocus(false)
+    valueBox:SetJustifyH("CENTER")
+    valueBox:SetText(FormatValue(val))
+
+    -- OnValueChanged updates the visual surfaces (label + editbox) on
+    -- every change for live feedback. opt.set is suppressed while a
+    -- drag is in progress — overlay's OnMouseUp commits exactly once
+    -- on release. Stepper buttons and the editbox commit via direct
+    -- SetValue calls outside any drag, so this branch fires opt.set
+    -- for them as before.
     slider.Slider:SetScript("OnValueChanged", function(self, value)
         value = math.floor(value / step + 0.5) * step
-        if opt.set then opt.set(nil, value) end
         label:SetText((opt.name or "") .. ": " .. FormatValue(value))
+        valueBox:SetText(FormatValue(value))
+        if not dragging and opt.set then opt.set(nil, value) end
+    end)
+
+    -- EditBox commit on Enter: parse, clamp, snap to step, write
+    -- through the slider so a single OnValueChanged path handles all
+    -- updates. Strips a trailing % so percent ranges accept "75%" or
+    -- "75". Empty / non-numeric input reverts to the slider's value.
+    valueBox:SetScript("OnEnterPressed", function(self)
+        local raw = self:GetText():gsub("%%", "")
+        local n = tonumber(raw)
+        if n then
+            if opt.isPercent then n = n / 100 end
+            if n < minVal then n = minVal end
+            if n > maxVal then n = maxVal end
+            n = math.floor(n / step + 0.5) * step
+            slider.Slider:SetValue(n)
+        else
+            self:SetText(FormatValue(slider.Slider:GetValue()))
+        end
+        self:ClearFocus()
+    end)
+    valueBox:SetScript("OnEscapePressed", function(self)
+        self:SetText(FormatValue(slider.Slider:GetValue()))
+        self:ClearFocus()
     end)
 
     -- Disabled state
@@ -138,10 +241,12 @@ local function CreateRangeWidget(parent, opt, contentWidth)
         slider.Slider:SetEnabled(not disabled)
         slider.Back:SetEnabled(not disabled)
         slider.Forward:SetEnabled(not disabled)
+        valueBox:SetEnabled(not disabled)
         label:SetTextColor(disabled and 0.4 or 0.9, disabled and 0.4 or 0.9, disabled and 0.4 or 0.9)
         local v = opt.get and opt.get() or minVal
         slider.Slider:SetValue(v)
         label:SetText((opt.name or "") .. ": " .. FormatValue(v))
+        valueBox:SetText(FormatValue(v))
     end)
 
     return frame, 54
