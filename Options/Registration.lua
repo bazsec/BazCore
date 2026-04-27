@@ -185,8 +185,26 @@ local function CreateTwoPanelLayout(container, optionsTable)
         end
     end
 
-    -- Two-panel groups (list/detail)
-    for _, groupOpt in ipairs(groupArgs) do
+    -- Two-panel groups (list/detail). Two shapes are supported:
+    --
+    --   Wrapper shape (BWD Drawers, BazBars Bars):
+    --     args = { drawers = { type="group", name="", args = {
+    --       drawer_1 = ..., drawer_2 = ...
+    --     } } }
+    --   The single top-level group's `args` ARE the list rows.
+    --
+    --   Sibling shape (BazBags Categories):
+    --     args = { cat_equipment = { type="group", name="Equipment", args=...},
+    --              cat_consumables = { ... }, ... }
+    --   Multiple top-level groups, each becomes a list row directly.
+    --
+    -- The wrapper-shape path is preserved for backwards compatibility.
+    -- The sibling-shape path used to call BuildListDetailPanel once per
+    -- group, stacking N panels on top of each other — fixed by wrapping
+    -- the groups in a synthetic host so BuildListDetailPanel sees them
+    -- as a single unified list.
+    if #groupArgs == 1 then
+        local groupOpt = groupArgs[1]
         if groupOpt.name and groupOpt.name ~= "" then
             local hdr, hh = O.widgetFactories.header(container, groupOpt, contentWidth - O.PAD * 2)
             hdr:SetPoint("TOPLEFT", container, "TOPLEFT", O.PAD, yOffset)
@@ -194,6 +212,12 @@ local function CreateTwoPanelLayout(container, optionsTable)
             yOffset = yOffset - hh - 4
         end
         O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, executeArgs)
+    elseif #groupArgs > 1 then
+        local hostGroup = { args = {} }
+        for i, g in ipairs(groupArgs) do
+            hostGroup.args[g._key or g.name or ("group_" .. i)] = g
+        end
+        O.BuildListDetailPanel(container, hostGroup, contentWidth, yOffset, executeArgs)
     end
 
     container:SetHeight(math.abs(yOffset) + O.PAD)
