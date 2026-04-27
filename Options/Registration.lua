@@ -375,16 +375,20 @@ local function SelectSubcategory(key)
     activeSubcategory = key
     if not window then return end
 
-    -- Update sidebar highlights
+    -- Update sidebar highlights. Uses the same gold-gradient
+    -- highlight + white-on-selected text the sub-lists use, so the
+    -- main left sidebar visually matches the right-panel list. The
+    -- old solid-blue LIST_SELECTED fill stuck out as the only place
+    -- in the suite that didn't follow the gold-gradient pattern.
     for entryKey, row in pairs(sidebarRows) do
-        if entryKey == key then
-            row.bg:SetColorTexture(unpack(O.LIST_SELECTED))
-            row.text:SetTextColor(unpack(O.GOLD))
+        local isSel = (entryKey == key)
+        O.ShowHighlightGroup(row.hlGroup, isSel)
+        if isSel then
+            row.text:SetTextColor(1, 1, 1)         -- white when selected
             row.text:SetAlpha(1.0)
         else
-            row.bg:SetColorTexture(0, 0, 0, 0)
-            row.text:SetTextColor(unpack(O.GOLD))
-            row.text:SetAlpha(0.7)
+            row.text:SetTextColor(unpack(O.GOLD))  -- gold otherwise
+            row.text:SetAlpha(0.75)
         end
     end
 
@@ -419,30 +423,37 @@ local function RenderSidebar()
         row:SetSize(SIDEBAR_WIDTH - 8, SIDEBAR_ROW_H)
         row:SetPoint("TOPLEFT", 4, y)
 
-        local bg = row:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        bg:SetColorTexture(0, 0, 0, 0)
-        row.bg = bg
+        -- Hover background (subtle white tint, only when not selected).
+        local hover = row:CreateTexture(nil, "BACKGROUND")
+        hover:SetAllPoints()
+        hover:SetColorTexture(1, 1, 1, 0.05)
+        hover:Hide()
+        row.hover = hover
+
+        -- Gold-gradient selection highlight - same one the sub-lists
+        -- and the User Manual tree use, so all three lists match.
+        row.hlGroup = O.BuildSelectionHighlight(row, SIDEBAR_ROW_H)
+        O.ShowHighlightGroup(row.hlGroup, false)
 
         local text = row:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
         text:SetPoint("LEFT", 10, 0)
         text:SetText(sub.label)
         text:SetTextColor(unpack(O.GOLD))
-        text:SetAlpha(0.7)
+        text:SetAlpha(0.75)
         row.text = text
 
         local capturedKey = sub.key
         row:SetScript("OnClick", function() SelectSubcategory(capturedKey) end)
         row:SetScript("OnEnter", function(self)
             if activeSubcategory ~= capturedKey then
-                self.bg:SetColorTexture(unpack(O.LIST_HOVER))
+                self.hover:Show()
                 self.text:SetAlpha(1.0)
             end
         end)
         row:SetScript("OnLeave", function(self)
             if activeSubcategory ~= capturedKey then
-                self.bg:SetColorTexture(0, 0, 0, 0)
-                self.text:SetAlpha(0.7)
+                self.hover:Hide()
+                self.text:SetAlpha(0.75)
             end
         end)
 
