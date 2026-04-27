@@ -21,13 +21,13 @@ BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), 
 
 ### Standalone Options Window
 
-*   **Dedicated 1618x883 portrait-framed window** - own home for every Baz addon's settings
-*   **Bottom tab strip** - one tab per registered Baz addon, click to switch
-*   **Left sidebar** - lists the active addon's sub-categories (User Manual, General Settings, custom pages)
-*   **Right content panel** - renders the selected sub-category, scrolls when content overflows
-*   **Spec-background atlas** - dark textured backdrop matching Blizzard's Specialization window
-*   **ESC closes**, draggable, position persists across sessions
-*   **Replaces Blizzard Settings panel integration** for Baz addons - stub canvas in Blizzard's Addon List jumps to the BazCore window
+*   **Dedicated window** for every Baz addon's settings — replaces Blizzard's cramped Settings panel
+*   **Bottom tabs** — one per Baz addon you have installed, click to switch
+*   **Left sidebar** lists the active addon's sub-categories (User Manual, General Settings, custom pages)
+*   **Right content panel** scrolls automatically when content overflows
+*   Dark textured background matching Blizzard's Specialization window
+*   ESC closes, draggable, position remembered across sessions
+*   Blizzard's AddOn List still has an "Addon Options" button that jumps straight here
 
 ### Page Builders
 
@@ -52,10 +52,10 @@ For documentation pages and managed-list detail panels:
 ### Form Widgets
 
 *   **toggle** - checkbox with label and optional description
-*   **range** - slider with click-anywhere-to-snap overlay, editable value box for precise entry, opt.set deferred until release (so expensive setters don't fire once-per-step during a drag)
-*   **input** - edit box with Enter to commit, Esc to revert
-*   **select** - dropdown that auto-sizes the button to fit the longest value
-*   **execute** - button, with optional confirm dialog and `width = "half"` for side-by-side layout
+*   **range** - slider with click-anywhere-to-snap behavior, an editable value box on the side for precise numeric entry, and value commits on release rather than mid-drag
+*   **input** - edit box (Enter to commit, Esc to revert)
+*   **select** - dropdown that auto-sizes to fit its longest value
+*   **execute** - button, optional confirm dialog, optional half-width for side-by-side layout
 
 ### List / Detail Panels
 
@@ -103,8 +103,8 @@ For documentation pages and managed-list detail panels:
 *   **ButtonGlow** - spell proc glow overlay system
 *   **Keybinds** - keybind management with SetOverrideBindingClick
 *   **Serialization** - export/import config strings
-*   **CreatePortraitWindow** - PortraitFrameFlatTemplate-based window helper with title, drag, ESC close, position persistence, and three-button portrait icon (left/middle/right click handlers)
-*   **CreateItemButton** - ItemButton-styled frame helper for addons that need item-button visuals without the full Blizzard template
+*   **CreatePortraitWindow** - addon-window helper with Blizzard's standard portrait chrome, drag, ESC close, position persistence, and three-button portrait icon (left/middle/right)
+*   **CreateItemButton** - item-button frame helper (icon, quality border, slot art) for addons that need bag-slot-style visuals
 
 ***
 

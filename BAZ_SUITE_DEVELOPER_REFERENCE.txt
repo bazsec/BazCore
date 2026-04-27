@@ -1,17 +1,16 @@
 ================================================================================
-BAZ SUITE - COMPLETE DEVELOPER REFERENCE
+BAZ SUITE - DEVELOPER REFERENCE
 ================================================================================
 Author: Baz4k
 Last Updated: April 2026
-WoW Version: Retail 12.0.1 (Midnight expansion)
-Interface Number: 120001
+WoW Version: Retail 12.0 (Midnight expansion)
+Interface Number: 120005
 License: GPL v2 (all addons)
-Category: Baz Suite (all addons use this WoW addon panel category)
+Category: Baz Suite (used as the WoW addon-list category for every addon)
 
-This document is the single source of truth for the Baz Suite of World of
-Warcraft addons. It covers architecture, design philosophy, APIs, file
-structures, build/release processes, known issues, and development patterns.
-Any AI assistant or developer working on these addons should read this first.
+This document covers everything you need to develop on the Baz Suite —
+architecture, APIs, file structures, conventions, build/release flow, and
+per-addon implementation notes.
 
 ================================================================================
 TABLE OF CONTENTS
@@ -26,115 +25,171 @@ TABLE OF CONTENTS
 7.  EDIT MODE FRAMEWORK
 8.  EVENT SYSTEM
 9.  MIDNIGHT SECRET TAINT
-10. BAZNOTIFICATIONCENTER ARCHITECTURE
-11. BAZBARS ARCHITECTURE
-12. BAZDUNGEONFINDER ARCHITECTURE
-13. BAZLOOTNOTIFIER ARCHITECTURE
-14. BAZFLIGHTZOOM ARCHITECTURE
-15. BAZMAP ARCHITECTURE
-16. FILE LOCATIONS & REPO STRUCTURE
-17. BUILD, RELEASE & CURSEFORGE
-18. CODING CONVENTIONS
-19. KNOWN ISSUES & GOTCHAS
-20. PENDING FEATURES
+10. BAZNOTIFICATIONCENTER
+11. BAZBARS
+12. BAZBAGS
+13. BAZWIDGETDRAWERS
+14. BAZWIDGETS
+15. BAZBROKERWIDGET
+16. BAZLOOTNOTIFIER  (maintenance mode)
+17. BAZFLIGHTZOOM
+18. BAZMAP
+19. BAZMAPPORTALS
+20. REPO STRUCTURE
+21. BUILD, RELEASE & CURSEFORGE
+22. CODING CONVENTIONS
+23. KNOWN ISSUES & GOTCHAS
+24. BLIZZARD SOURCE REFERENCE
 
 ================================================================================
 1. OVERVIEW & DESIGN PHILOSOPHY
 ================================================================================
 
-The Baz Suite is a collection of World of Warcraft retail addons all built on
-a shared framework called BazCore. The core philosophy is:
+The Baz Suite is a collection of WoW retail addons all built on a shared
+framework called BazCore.
 
-- ONE FRAMEWORK: BazCore provides lifecycle management, profiles, settings
-  panels, Edit Mode integration, events, slash commands, minimap button, UI
-  utilities, and more. Individual addons are thin and focused.
+- ONE FRAMEWORK
+  BazCore provides lifecycle management, profiles, the standalone Options
+  window, page builders, content blocks, list/detail panels, form widgets,
+  the User Manual system, Edit Mode integration, events, slash commands,
+  the suite-wide minimap button, and a notification bridge. Individual
+  addons stay thin and focused.
 
-- CONSISTENCY: Every addon registers the same way, has the same options panel
-  structure (landing page > settings > profiles), uses the same widget types,
-  the same color scheme (gold headers, bordered panels), and the same slash
+- CONSISTENCY
+  Every addon registers the same way, has the same options-panel structure
+  (landing page > settings > custom subcategories > profiles), and uses the
+  same widget types, color palette (gold headers + dark panels), and slash
   command patterns.
 
-- BAZCORE OWNS THE LOOK: All visual styling for options panels, Edit Mode
-  overlays, and shared UI comes from BazCore. If you change it in BazCore,
-  every addon updates automatically. Individual addons should NEVER create
-  their own custom options panel widgets or styling.
+- BAZCORE OWNS THE LOOK
+  All shared visual styling — options panels, Edit Mode overlays, the
+  standalone Options window chrome, the User Manual chrome — comes from
+  BazCore. Change it once in BazCore and every addon updates. Addons
+  should NEVER build their own settings widgets or styling.
 
-- MODERN APIs: All addons use Dragonflight+ (12.0 Midnight) APIs. No
-  deprecated UIDropDownMenu, no InterfaceOptionsCheckButtonTemplate, no
-  external libraries. Use C_Spell, C_Item, C_MountJournal, MenuUtil,
-  Settings API, MinimalScrollBar, MinimalSliderWithSteppersTemplate, etc.
+- MODERN APIS ONLY
+  Dragonflight+ APIs throughout. No deprecated UIDropDownMenu,
+  InterfaceOptionsCheckButtonTemplate, GetSpellInfo, etc. Use C_Spell,
+  C_Item, C_MountJournal, MenuUtil, Settings API, MinimalScrollBar,
+  MinimalSliderWithSteppersTemplate, EventUtil.ContinueOnAddOnLoaded,
+  NineSliceUtil, etc.
 
-- PROFILES: Every addon that has user-facing settings uses BazCore's profile
-  system. Per-character, per-class, per-spec profile assignment. Profiles
-  subcategory is always the LAST subcategory in settings.
+- PROFILES
+  Every addon with user-facing settings uses BazCore's profile system.
+  Per-character, per-class, per-spec profile assignment. The Profiles
+  subcategory is always last in an addon's settings tree.
 
-- NO GLOBALS: Addons access each other via BazCore:GetAddon("name"), not
-  via global variables. The only globals are the BazCore table itself and
-  public API tables (BazNotificationCenter/BNC).
+- NO GLOBALS
+  Addons access each other via BazCore:GetAddon("name"). The only globals
+  are the BazCore table itself and a couple of public API tables
+  (BazNotificationCenter / BNC).
 
-- SAFE STRING/NUMBER HANDLING: Midnight introduced "secret" tainted values
-  from hardware events. All addons must use pcall(string.format, "%s", str)
-  to strip string taint and pcall(string.format, "%d", num) for number
-  taint. BazCore provides BazCore:SafeString(), BazCore:SafeMatch(), etc.
+- SAFE STRING & NUMBER HANDLING
+  Midnight introduced "secret" tainted values from hardware events.
+  All string/number ops on data from chat events, aura events, etc. must
+  use pcall(string.format, "%s"|"%d", val) to strip taint. BazCore exposes
+  SafeString / SafeMatch helpers; BNC has its own Utils/SafeString suite.
 
 ================================================================================
 2. ADDON INVENTORY
 ================================================================================
 
-ADDON               VERSION  CURSE ID   SAVEDVARIABLE           REPO
-BazCore              020     1503896    BazCoreDB               bazsec/BazCore
-BazBars              021     1501110    BazBarsDB               bazsec/BazBars
-BazDungeonFinder     008     1503631    BazDungeonFinderSV      bazsec/BazDungeonFinder
-BazLootNotifier      013     1076876    BazLootNotifierDB       bazsec/BazLootNotifier
-BazFlightZoom        005     1503675    BazFlightZoomSV         bazsec/BazFlightZoom
-BazMap               011     1404160    BazMapDB                bazsec/BazMap
-BazNotificationCenter 010    1498445    BazNotificationCenterDB bazsec/BazNotificationCenter
+Current versions at the time of this doc are below. Always check each
+repo's latest tag for the actual current version — releases happen often.
 
-All addons depend on BazCore. BazBars optionally supports Masque for skinning.
-All repos are under the GitHub user "bazsec".
-CurseForge API key: stored as CF_API_KEY secret on each GitHub repo.
+ADDON                  CURSE ID    SAVED VARIABLE             REPO (bazsec/...)
+BazCore                1503896     BazCoreDB                  BazCore
+BazBars                1501110     BazBarsDB                  BazBars
+BazBags                1525946     BazBagsDB                  BazBags
+BazWidgetDrawers       1511379     BazWidgetDrawersDB         BazWidgetDrawers
+BazWidgets             1513522     BazWidgetsDB               BazWidgets
+BazBrokerWidget        1524619     BazBrokerWidgetDB          BazBrokerWidget
+BazNotificationCenter  1498445     BazNotificationCenterDB    BazNotificationCenter
+BazLootNotifier        1076876     BazLootNotifierDB          BazLootNotifier  (maintenance)
+BazFlightZoom          1503675     BazFlightZoomSV            BazFlightZoom
+BazMap                 1404160     BazMapDB                   BazMap
+BazMapPortals          1402800     BazMapPortalsDB            BazMapPortals
+
+All addons depend on BazCore. BazWidgetDrawers, BazWidgets, and
+BazBrokerWidget also depend on each other in a stack:
+  BazCore  ←  BazWidgetDrawers  ←  BazWidgets / BazBrokerWidget
+
+BazBars optionally supports Masque for skinning. CurseForge API key is
+stored as CF_API_KEY secret on each repo. All repos are under the GitHub
+user "bazsec". The repo for BazWidgetDrawers used to be named
+"BazDrawer_repo" locally and "bazsec/BazDrawer" on GitHub before being
+renamed; older docs and commits may reference the old name.
 
 ================================================================================
 3. BAZCORE FRAMEWORK
 ================================================================================
 
-BazCore is a zero-dependency framework library. It provides:
+BazCore is a zero-dependency framework library. The TOC load order is:
 
-MODULES (files in BazCore):
-- Core.lua         - Addon registry, lifecycle, RegisterAddon, AddonMixin
-- Events.lua       - Unified WoW event + custom event system
-- Profiles.lua     - Named profile system, CreateDBProxy, profile management
-- Commands.lua     - Declarative slash command framework
-- UI.lua           - Colors, backdrops, fade helpers, MakeResizable, draggable
-- Timers.lua       - Managed timers, throttle, debounce (currently unused)
-- ObjectPool.lua   - Reusable object pool factory
-- Format.lua       - Money, time, number formatting, SafeString/SafeMatch
-- Locale.lua       - Localization system (currently unused)
-- Menu.lua         - Context menu wrapper (currently unused)
-- Animations.lua   - Animation presets (currently unused)
-- MinimapButton.lua- Single shared minimap button for all Baz addons
-- ButtonGlow.lua   - Spell proc overlay glow (used by BazBars)
-- Compartment.lua  - Addon Compartment (Dragonflight minimap dropdown)
-- Keybinds.lua     - Override keybinding framework (currently unused)
-- EditMode.lua     - Edit Mode framework (overlays, snapping, settings popup)
-- Serialization.lua- Table serialization + Base64 (used by BazBars export)
-- OptionsPanel.lua - Options table renderer with two-column panels
+  Libs/LibStub/LibStub.lua
+  Libs/LibBazWidget-1.0/LibBazWidget-1.0.lua
 
-NOTE: Several modules (Timers, Locale, Menu, Animations, Keybinds) are built
-but not yet used by any addon. They exist as future-ready utilities. Do NOT
-remove them — they are part of the framework's standard library.
+  Core.lua          - Addon registry, lifecycle, RegisterAddon, AddonMixin
+  Events.lua        - Unified WoW event + custom event system
+  Profiles.lua      - Named profile system, CreateDBProxy, profile management
+  Commands.lua      - Declarative slash command framework
+  UI.lua            - Colors, backdrops, fade helpers, MakeResizable,
+                       CreatePortraitWindow, CreateItemButton
+  Timers.lua        - Managed timers, throttle, debounce
+  ObjectPool.lua    - Reusable object pool factory
+  Format.lua        - Money, time, number formatting, SafeString/SafeMatch
+  Locale.lua        - Localization stub (currently unused)
+  Menu.lua          - Context menu wrapper (currently unused)
+  Animations.lua    - Animation presets (currently unused)
+  MinimapButton.lua - Single shared minimap button for all Baz addons
+  ButtonGlow.lua    - Spell proc overlay glow (used by BazBars + BWD widgets)
+  Compartment.lua   - Addon Compartment (Dragonflight minimap dropdown)
+  Keybinds.lua      - Override keybinding framework (currently unused)
+  EditMode.lua      - Edit Mode framework
+  Serialization.lua - Table serialization + Base64 (used by BazBars export)
+
+  Options/Constants.lua          - Shared layout/font/color constants +
+                                    O.BuildSelectionHighlight,
+                                    O.ResolveListWidth, O.BuildTitleBar
+  Options/WidgetFactories.lua    - Form widgets: toggle, range, input,
+                                    select, execute, header, description
+  Options/LayoutEngine.lua       - O.RenderWidgets layout engine
+  Options/ListDetail.lua         - Left-list / right-detail panel
+                                    (BuildListDetailPanel)
+  Options/PageBuilders.lua       - CreateLandingPage, CreateModulesPage,
+                                    CreateGlobalOptionsPage,
+                                    CreateManagedListPage
+  Options/ContentFactories.lua   - Rich content blocks: h1-h4, paragraph,
+                                    lead, caption, quote, list, image, note,
+                                    code, divider, spacer, table,
+                                    collapsible
+  Options/Registration.lua       - The standalone Options window itself,
+                                    RegisterOptionsTable, AddToSettings,
+                                    OpenOptionsPanel, RefreshOptions
+  Options/UserGuide.lua          - User Manual host + RegisterUserGuide
+
+  OptionsPanel.lua    - Loader stub (back-compat; real code lives in Options/)
+  MemoryPage.lua      - Live per-addon memory graphs (BazCore sub-page)
+  AddonListButton.lua - "Addon Options" button on Blizzard's AddOn list
+  IconPicker.lua      - Reusable icon picker dialog
+  DockableWidget.lua  - Public widget API on top of LibBazWidget-1.0
 
 KEY GLOBALS:
-- BazCore           - The framework table (always available)
-- BazCore.VERSION   - Read from TOC dynamically
-- BazCore.addons    - Registry of addon configs
-- BazCore.AddonMixin- Metatable for addon objects
+  BazCore            - Framework table
+  BazCore.VERSION    - Read from TOC
+  BazCore.addons     - Registry of registered addons
+  BazCore.AddonMixin - Metatable for addon objects
+  BazCore._Options   - Internal options namespace (O.* helpers)
+
+A few modules (Locale, Menu, Animations, Keybinds) are built but not yet
+consumed by any shipped addon. They're framework-ready utilities — keep
+them, they're part of the standard library.
 
 ================================================================================
 4. ADDON REGISTRATION PATTERN
 ================================================================================
 
-Every addon registers with BazCore using this pattern:
+Every addon registers with BazCore using:
 
     local addon = BazCore:RegisterAddon("AddonName", {
         title = "Display Name",
@@ -147,100 +202,90 @@ Every addon registers with BazCore using this pattern:
         slash = { "/cmd", "/longcmd" },
         commands = {
             subcmd = {
-                desc = "Description",
+                desc    = "Description",
                 handler = function(args) ... end,
             },
         },
-        defaultHandler = function() ... end,  -- empty /cmd
+        defaultHandler = function() ... end,   -- empty /cmd
         minimap = {
-            label = "AddonName",
-            icon = 123456,        -- optional, auto-read from TOC
-            onClick = function()  -- optional, defaults to OpenOptionsPanel
+            label   = "AddonName",
+            icon    = 123456,                  -- optional, auto-read from TOC
+            onClick = function()               -- defaults to OpenOptionsPanel
                 ...
             end,
         },
-        onLoad = function(self)   -- fires after ADDON_LOADED, SV ready
-            ...
-        end,
-        onReady = function(self)  -- fires after PLAYER_LOGIN
-            ...
-        end,
+        onLoad  = function(self) ... end,      -- after ADDON_LOADED, SV ready
+        onReady = function(self) ... end,      -- after PLAYER_LOGIN
     })
 
 LIFECYCLE ORDER:
-1. All TOC files load synchronously (Lua executes top-to-bottom)
-2. ADDON_LOADED fires for each addon
-3. BazCore's EventUtil.ContinueOnAddOnLoaded triggers:
-   a. SavedVariables initialized
-   b. Profiles initialized (if profiles = true)
-   c. addon.db auto-wired via CreateDBProxy
-   d. onLoad callback fires
-   e. Slash commands registered
-   f. Minimap entry registered
-4. PLAYER_LOGIN fires
-5. onReady callback fires
+  1. TOC files load synchronously
+  2. ADDON_LOADED fires per addon
+  3. EventUtil.ContinueOnAddOnLoaded triggers:
+     a. SavedVariables initialized
+     b. Profiles initialized (when profiles = true)
+     c. addon.db wired via CreateDBProxy
+     d. onLoad fires
+     e. Slash commands registered
+     f. Minimap entry registered
+  4. PLAYER_LOGIN fires
+  5. onReady fires
 
 ADDON OBJECT (returned by RegisterAddon):
-- addon.name        - Addon name string
-- addon.config      - The config table passed to RegisterAddon
-- addon.loaded      - Boolean, true after onLoad
-- addon.db          - Database proxy { profile = metatable }
-- addon:GetSetting(key)  - Reads addon.db.profile[key]
-- addon:SetSetting(key, value) - Writes addon.db.profile[key]
-- addon:On(event, handler)     - Register WoW event handler
-- addon:Off(event)             - Unregister WoW event handler
-- addon:Print(msg)             - Chat print with addon name prefix
+  addon.name                       - Addon name string
+  addon.config                     - The config table
+  addon.loaded                     - true after onLoad
+  addon.db                         - { profile = metatable } proxy
+  addon:GetSetting(key)            - Reads addon.db.profile[key]
+  addon:SetSetting(key, value)     - Writes addon.db.profile[key]
+  addon:On(event, handler)         - Register WoW event
+  addon:Off(event)                 - Unregister WoW event
+  addon:Print(msg)                 - Chat print with addon-name prefix
 
-OTHER FILES ACCESS THE ADDON VIA:
+OTHER FILES ACCESS THE ADDON OBJECT VIA:
     local addon = BazCore:GetAddon("AddonName")
 
-Do NOT use globals like BazDF, BazBars, etc. to share the addon object
-between files. Always use BazCore:GetAddon().
+Never share the addon object via a global — always go through GetAddon.
 
 ================================================================================
 5. DATABASE & PROFILES
 ================================================================================
 
-When an addon sets profiles = true in RegisterAddon, BazCore:
-1. Calls InitProfiles() to create the profile structure in the SV
-2. Creates a "Default" profile with the addon's defaults
-3. Auto-wires addon.db = BazCore:CreateDBProxy(name)
+When `profiles = true` is set, BazCore:
+  1. Calls InitProfiles() to create the profile structure in the SV
+  2. Creates a "Default" profile from the addon's defaults
+  3. Wires addon.db = BazCore:CreateDBProxy(name)
 
-The DB proxy structure:
+The DB proxy:
     addon.db = {
         profile = setmetatable({}, {
-            __index = function(_, key)
-                -- reads sv.profiles[activeProfile][key]
-            end,
-            __newindex = function(_, key, value)
-                -- writes sv.profiles[activeProfile][key]
-            end,
+            __index    = function(_, key)         -- reads sv.profiles[active][key]
+            __newindex = function(_, key, value)  -- writes sv.profiles[active][key]
         })
     }
 
 Access settings via:
-    addon:GetSetting("key")        -- or
-    addon.db.profile.key           -- direct access
+    addon:GetSetting("key")    -- preferred, also handles default fallback
+    addon.db.profile.key       -- direct access
 
-The SavedVariable structure on disk:
+SAVED VARIABLE LAYOUT:
     AddonNameDB = {
         activeProfile = "Default",
         profiles = {
-            Default = { key1 = val1, key2 = val2, ... },
-            MyProfile = { ... },
+            Default     = { key1 = val1, ... },
+            MyProfile   = { ... },
         },
         assignments = {
             ["CharName - Realm"] = "ProfileName",
-            ["Warrior"] = "TankProfile",
+            ["Warrior"]          = "TankProfile",
         },
     }
 
 SPECIAL CASE - BazNotificationCenter:
-BNC flattens the proxy: addon.db = bncAddon.db.profile
-This means addon.db.key reads directly from the active profile without
-the .profile indirection. This was done because BNC has 56+ references
-to addon.db.key from the original WNC codebase. All other addons use
-the standard addon.db.profile.key pattern.
+BNC flattens the proxy: `addon.db = bncAddon.db.profile`. All BNC code
+reads/writes via `addon.db.key` rather than `addon.db.profile.key`. This
+is for back-compat with the original WNC codebase. Other addons use the
+standard `addon.db.profile.key` shape.
 
 PROFILE MANAGEMENT API:
     BazCore:GetActiveProfile(addonName)
@@ -252,148 +297,199 @@ PROFILE MANAGEMENT API:
     BazCore:ResetProfile(addonName, profileName)
     BazCore:ListProfiles(addonName)
     BazCore:AssignProfile(addonName, scope, profileName)
-    BazCore:GetProfileOptionsTable(addonName) -- for Profiles subcategory
+    BazCore:GetProfileOptionsTable(addonName)   -- for Profiles subcategory
 
 ================================================================================
 6. OPTIONS PANEL SYSTEM
 ================================================================================
 
-All addon settings pages are rendered by BazCore's OptionsPanel module.
-Addons define options as declarative tables; BazCore handles all rendering.
+All addon settings render inside BazCore's STANDALONE OPTIONS WINDOW —
+NOT through Blizzard's Settings panel. The Settings panel still has a
+stub canvas for BazCore (the "Addon Options" button in Blizzard's
+AddOn List jumps to our window) but every other addon lives only inside
+the Baz Suite window.
+
+WINDOW STRUCTURE:
+- Bottom tab strip — one tab per registered Baz addon, click to switch
+- Left sidebar — sub-categories of the active addon (User Manual,
+  General Settings, custom pages, Profiles)
+- Right content panel — renders the selected sub-category
+- Dark spec-background atlas backing, ESC closes, draggable, position
+  persists across sessions
 
 REGISTRATION:
     BazCore:RegisterOptionsTable("AddonName", function()
         return { name = "...", type = "group", args = { ... } }
     end)
-    BazCore:AddToSettings("AddonName", "DisplayName")
-    BazCore:AddToSettings("AddonName-Settings", "Settings", "AddonName")  -- subcategory
+    BazCore:AddToSettings("AddonName", "Display Name")
+    BazCore:AddToSettings("AddonName-Settings", "General Settings", "AddonName")
 
-STANDARD PAGE STRUCTURE (every addon):
-1. Landing Page (main) - via BazCore:CreateLandingPage()
-2. Settings subcategory - options table with headers + widgets
-3. [Optional subcategories] - e.g., BazBars "Global Options", "Bar Options"
-4. Profiles subcategory (always last) - via BazCore:GetProfileOptionsTable()
+The third argument to AddToSettings is the parent — pass an addon name
+to make the entry a sub-category in that addon's tab.
 
-LANDING PAGE API:
-    BazCore:CreateLandingPage("AddonName", {
-        subtitle = "Short description",
-        description = "What the addon does...",
-        features = "Key feature highlights...",
-        guide = {
-            { "Step Title", "Step description text" },
-        },
-        commands = {
-            { "/cmd", "What it does" },
-            { "/cmd sub", "What sub does" },
+PAGE-BUILDER HELPERS (Options/PageBuilders.lua):
+- BazCore:CreateLandingPage(addonName, content)
+    Description / Features / Quick Guide / Slash Commands intro page.
+
+- BazCore:CreateModulesPage(addonName, config)
+    Flat list of enable/disable toggles per module.
+
+- BazCore:CreateGlobalOptionsPage(addonName, config)
+    Per-key override toggles cascading to all widgets/modules.
+
+- BazCore:CreateManagedListPage(addonName, config)
+    List-detail editing pages — categories, drawers, bars, profiles.
+    Auto-h1 detail title, intro / introBlocks, optional Create / Reset
+    buttons, source-based collapsible sections via BuildListDetailPanel.
+    Returns a function so getItems re-runs on each Refresh.
+
+WIDGET TYPES (Options/WidgetFactories.lua):
+    type = "header"       Gold section header with divider line
+    type = "description"  Text block (default GameFontNormal,
+                          fontSize = "small" for smaller)
+    type = "toggle"       Checkbox with label + optional desc
+    type = "range"        Slider with click-anywhere-to-snap overlay,
+                          editable value box, opt.set on release
+    type = "input"        Text input (Enter commits, Esc reverts)
+    type = "select"       Dropdown via MenuUtil, auto-sized to fit longest
+    type = "execute"      Button, optional confirm dialog,
+                          width = "half" for side-by-side layout
+
+CONTENT BLOCKS (Options/ContentFactories.lua) — used by the User Manual
+and any settings page that wants documentation-style content:
+    h1 / h2 / h3 / h4   Heading hierarchy with optional underline accent
+    paragraph           Body text, wrapped, normal color
+    lead                White, larger — for intros
+    caption             Small grey, centered — for image captions
+    quote               Indented + left vertical bar
+    list                Bulleted/numbered, three nesting levels
+    image               Texture / atlas / fileID with caption
+    note                Tip / info / warning / danger callouts
+    code                Monospace block (slash commands, macros)
+    divider             Thin rule
+    spacer              Blank vertical space
+    table               Header row + striped data rows
+    collapsible         Animated expand/collapse with persistent state
+
+Mix content blocks and form widgets in the same args table — paragraphs
+between toggles, h3 section headers, notes for important caveats, etc.
+The renderer (Options/LayoutEngine.lua's O.RenderWidgets) handles both
+seamlessly.
+
+WIDGET PROPERTIES:
+    order                Sort order (use gaps: 1, 10, 20, 30, 90)
+    name                 Display label
+    desc                 Tooltip / sub-label (description widget uses
+                         opt.name; content blocks use opt.text)
+    get / set            Standard read/write callbacks
+    min / max / step     Range type
+    values               Select type (table or function)
+    func                 Execute type
+    confirm / confirmText   Execute type, confirmation dialog
+    isPercent            Range type, displays as percentage
+    fontSize             Description type: "small" for smaller font
+    width = "half"       Execute type, half-width side-by-side layout
+
+LIST/DETAIL PANEL (Options/ListDetail.lua):
+- BuildListDetailPanel renders a left list of clickable rows + right
+  detail panel. The page's options table provides `args = { group = {
+  type="group", args = { item1 = ..., item2 = ... } }}` and the children
+  become the list rows.
+- Source-based collapsible sections kick in automatically when any
+  child has a `source` field.
+- Selection persists across refreshes (stored on the container frame).
+- Gold-gradient selection highlight, hover state, native scroll bars.
+
+USER MANUAL (Options/UserGuide.lua):
+    BazCore:RegisterUserGuide("AddonName", {
+        title = "Display Name",
+        intro = "Lead paragraph.",
+        pages = {
+            {
+                title    = "Overview",
+                blocks   = { ... },
+                children = { ... },         -- one level of sub-pages
+            },
+            {
+                title    = "Slash Commands",
+                text     = "Plain-text page body (legacy)",
+                sections = { { heading = "...", text = "..." }, ... },
+            },
         },
     })
 
-The landing page auto-reads icon and version from the addon's TOC metadata.
-Sections: Description > Features > Quick Guide > Slash Commands
-Colors: Gold titles (|cffffd700), green commands (|cff00ff00), white text
-
-WIDGET TYPES:
-    type = "header"       - Gold section header with divider line
-    type = "description"  - Text block (default GameFontNormal, use fontSize="small" for smaller)
-    type = "toggle"       - Checkbox with label and optional desc
-    type = "range"        - Slider with min/max/step, supports isPercent
-    type = "select"       - Dropdown menu via MenuUtil
-    type = "input"        - Text input box
-    type = "execute"      - Button, supports confirm dialog
-
-WIDGET PROPERTIES:
-    order = number         - Sort order (use gaps: 1, 10, 20, 30, 90)
-    name = "Label"         - Display text
-    desc = "Tooltip"       - Optional description (shows below toggle, tooltip on execute)
-    get = function()       - Returns current value
-    set = function(_, val) - Sets new value
-    min, max, step         - For range type
-    values = { k = "v" }   - For select type (table or function)
-    func = function()      - For execute type
-    confirm = true         - For execute type, shows confirmation dialog
-    confirmText = "..."    - Custom confirmation message
-    isPercent = true        - For range type, displays as percentage
-    fontSize = "small"     - For description type, uses smaller font
-
-TWO-COLUMN PANEL LAYOUT:
-When the content area is wider than 500px, BazCore automatically renders
-settings in two-column bordered panels:
-- Headers and descriptions span full width (act as section breaks)
-- Toggles, ranges, selects, inputs flow into left/right panels
-- Each panel has a subtle dark background with thin border
-- The layout adjusts automatically; no addon code needed
+A "User Manual" sub-category appears under that addon's tab. The right
+panel renders content blocks; the left panel is a tree with one level of
+nested children.
 
 NAMING CONVENTION FOR SUBCATEGORIES:
-    "AddonName"              - Main/landing page
-    "AddonName-Settings"     - Settings subcategory
-    "AddonName-Profiles"     - Profiles subcategory
-    "AddonName-Custom"       - Any custom subcategory
+    "AddonName"             Main / landing page
+    "AddonName-Settings"    Settings subcategory (or "-General-Settings")
+    "AddonName-Categories"  Custom subcategory
+    "AddonName-Profiles"    Profiles subcategory
 Use hyphens, not underscores. Use the full addon name, not abbreviations.
 
 ================================================================================
 7. EDIT MODE FRAMEWORK
 ================================================================================
 
-BazCore provides Edit Mode integration for addons with draggable UI frames.
+BazCore wraps Blizzard's Edit Mode for any addon with on-screen
+draggable frames.
 
 REGISTRATION:
     BazCore:RegisterEditModeFrame(frame, {
-        label = "Frame Name",
-        addonName = "AddonName",
-        positionKey = "position",
+        label           = "Frame Name",
+        addonName       = "AddonName",
+        positionKey     = "position",
         defaultPosition = { x = 0, y = 150 },
         settings = {
-            { type = "slider", key = "scale", label = "Scale", ... },
+            { type = "slider",   key = "scale",   label = "Scale", ... },
             { type = "checkbox", key = "enabled", label = "Enabled" },
-            { type = "dropdown", key = "mode", label = "Mode", ... },
+            { type = "dropdown", key = "mode",    label = "Mode", ... },
             { type = "nudge" },
         },
-        actions = {
-            { label = "Reset Position", callback = function() ... end },
-        },
+        actions  = { { label = "Reset Position", callback = ... } },
         sections = {
             { name = "Appearance", collapsed = false },
-            { name = "Behavior", collapsed = true },
+            { name = "Behavior",   collapsed = true },
         },
     })
 
 FEATURES:
-- Nine-slice overlays (cyan highlight when Edit Mode active, yellow when selected)
+- Nine-slice overlays (cyan when Edit Mode active, yellow when selected)
 - Grid snapping with red preview lines during drag
 - Selection sync with Blizzard Edit Mode frames
 - Configurable settings popup with collapsible sections
 - Widget types: slider, checkbox, dropdown, input, nudge, color picker
-- ESC key closes the settings popup
-- Smart popup positioning (flips side when near screen edge)
-- Dynamic label update via BazCore:UpdateEditModeLabel(frame, newLabel)
+- ESC closes the popup
+- Smart popup positioning (flips side near screen edges)
+- Dynamic label: BazCore:UpdateEditModeLabel(frame, newLabel)
 
-IMPORTANT: Use GetScale() for grid snapping, NOT GetEffectiveScale().
-Grid coordinates are in UIParent coordinate space.
+Use GetScale() for grid snapping, NOT GetEffectiveScale(). Grid coords
+are in UIParent coordinate space.
 
 ================================================================================
 8. EVENT SYSTEM
 ================================================================================
 
-BazCore provides a unified WoW event system. Addons register via AddonMixin:
-
-    addon:On("EVENT_NAME", function(event, ...) ... end)
-    addon:On({"EVENT1", "EVENT2"}, function(event, ...) ... end)
+WoW events via the AddonMixin:
+    addon:On("EVENT_NAME", function(event, ...) end)
+    addon:On({"EVENT1", "EVENT2"}, function(event, ...) end)
     addon:Off("EVENT_NAME")
 
 BazCore-level events:
     BazCore:On("EVENT", handler)
     BazCore:Fire("CUSTOM_EVENT", ...)
 
-Each addon's events are keyed by addon name, so multiple addons can listen
-to the same WoW event without conflict.
+Each addon's handlers are keyed by addon name, so multiple addons can
+listen to the same WoW event without conflict.
 
-BazNotificationCenter has its OWN internal CallbackRegistry (addon.Events)
-for BNC-specific custom events like NOTIFICATION_ADDED, TOAST_REQUESTED,
-SETTING_CHANGED, etc. These are NOT WoW events and do NOT go through
-BazCore's event system. This is intentional — BNC's internal events are
-for coordinating between its own files (Panel, Toast, ToggleButton, etc.).
+BNC INTERNAL EVENTS:
+BNC has its own CallbackRegistry (addon.Events) for BNC-only custom
+events like NOTIFICATION_ADDED, TOAST_REQUESTED, SETTING_CHANGED. These
+are NOT WoW events and do NOT go through BazCore. They're used to wire
+BNC's internal files (Panel, Toast, ToggleButton, etc.) together.
 
-BNC internal events:
     addon.Events:Register("EVENT_NAME", callback)
     addon.Events:Trigger("EVENT_NAME", ...)
     addon.Events:Unregister("EVENT_NAME", callback)
@@ -402,42 +498,42 @@ BNC internal events:
 9. MIDNIGHT SECRET TAINT
 ================================================================================
 
-WoW 12.0 (Midnight) introduced "secret" values that are tainted when they
-come from hardware events (CHAT_MSG_*, aura data, spell info, etc.).
+WoW 12.0 (Midnight) added "secret" tainted values that flow from
+hardware events (CHAT_MSG_*, aura data, spell info, etc.). They behave
+differently from old-style protected-frame taint and require explicit
+laundering.
 
 SECRET STRINGS:
-- tostring() on a secret string returns ANOTHER secret string (does NOT strip taint)
-- string.format("%s", secretStr) strips taint but can throw if the string is protected
-- CORRECT: local ok, clean = pcall(string.format, "%s", secretStr)
-- BazCore provides: BazCore:SafeString(str), BazCore:SafeMatch(str, pattern)
-- BNC provides: BNC.SafeMatch(), BNC.SafeFind(), BNC.SafeGsub(), etc.
+- tostring() returns ANOTHER secret string — does NOT strip taint
+- string.format("%s", str) strips taint but can throw on protected strings
+- CORRECT: local ok, clean = pcall(string.format, "%s", str)
+- Helpers: BazCore:SafeString(str), BazCore:SafeMatch(str, pattern)
+- BNC has its own suite: BNC.SafeMatch / SafeFind / SafeGsub / etc.
 
 SECRET NUMBERS:
-- Introduced in Midnight for aura spellIds and other numeric values
-- Cannot compare a secret number with == directly
-- CORRECT: local ok, clean = pcall(function() return tonumber(string.format("%d", secretNum)) end)
+- Auras and spellIDs from events come as secret numbers
+- Direct == comparisons on secret numbers don't always work
+- CORRECT:
+    local ok, clean = pcall(function()
+        return tonumber(string.format("%d", secretNum))
+    end)
 
-AFFECTED AREAS IN BAZ SUITE:
-- BazLootNotifier Events.lua: Desecret() helper for all chat event handlers
-- BazBars Button.lua: GetSpellName() strips taint from C_Spell.GetSpellInfo().name
-- BazBars Button.lua: IsSpellUsable uses spellID (number) not name (potentially tainted)
-- BazFlightZoom Core.lua: Aura spellId comparison uses string.format("%d") desecret
-- BazNotificationCenter Utils/SafeString.lua: Full suite of safe string operations
-
-WHEN WRITING NEW CODE:
-- Always pcall any string operation on data from WoW API chat/aura events
-- Never compare secret numbers directly — desecret first
-- Never set a tainted string as a secure button attribute (causes silent failure)
+TYPICAL OFFENDERS:
+- Chat event handlers (BLN, BNC modules, BazBags pin parsing)
+- Aura iteration (BazFlightZoom mount detection)
+- Spell info from C_Spell.GetSpellInfo (BazBars button names)
+- Setting a tainted string as a button attribute -> SILENT failure;
+  always launder before SetAttribute
 
 ================================================================================
-10. BAZNOTIFICATIONCENTER ARCHITECTURE
+10. BAZNOTIFICATIONCENTER
 ================================================================================
 
-BNC is the most complex addon in the suite. Originally "WNC" (WoW Notification
-Center), it was migrated to BazCore and all 20 module addons were bundled in.
+The most complex addon in the suite — a notification center with toasts
++ persistent history + 20 modules covering 17+ event categories.
 
 GLOBAL API:
-    BazNotificationCenter = {}   -- Full name
+    BazNotificationCenter        -- Full name
     BNC = BazNotificationCenter  -- Short alias for module authors
 
 PUBLIC API (used by modules):
@@ -451,35 +547,32 @@ PUBLIC API (used by modules):
     BNC:DismissNotification(id)
     BNC:DismissAll(moduleFilter)
     BNC:GetNotifications(moduleFilter)
-    BNC:ToggleDND(state)
-    BNC:IsDND()
-    BNC:HasTomTom()
-    BNC:SetWaypoint(waypointData)
+    BNC:ToggleDND(state) / BNC:IsDND()
+    BNC:HasTomTom() / BNC:SetWaypoint(waypointData)
     BNC:CreateDeduplicator(windowSeconds)
     BNC:CreateAccumulator(flushDelay, onFlush)
-    BNC.SafeMatch(str, pattern)
-    BNC.SafeFind/SafeGsub/SafeLower/SafeSub/SafeLen/StripEscapes
+    BNC.SafeMatch / SafeFind / SafeGsub / SafeLower / SafeSub / SafeLen /
+    BNC.StripEscapes
 
 LIFECYCLE:
-BNC registers with BazCore:RegisterAddon() but also has its own internal
-CallbackRegistry (addon.Events) for custom events. The lifecycle is:
 1. BazCore handles ADDON_LOADED, SV init, profile wiring
-2. onLoad fires -> migrates flat SV data, flattens db proxy, fires CORE_LOADED
-3. CORE_LOADED -> UI initializes (Panel, Toast, ToggleButton, ModuleRegistry)
-4. PLAYER_ENTERING_WORLD -> fires PLAYER_READY (bridged via bncAddon:On)
-5. Modules call BNC:RegisterModule() and BNC:RegisterModuleOptions() at load time
+2. onLoad migrates flat SV data, flattens db proxy, fires CORE_LOADED
+3. CORE_LOADED -> UI initializes (Panel, Toast, ToggleButton, Registry)
+4. PLAYER_ENTERING_WORLD -> fires PLAYER_READY
+5. Modules call BNC:RegisterModule + BNC:RegisterModuleOptions on load
 
 NOTIFICATION FLOW:
-Module calls BNC:Push(data) ->
-  Validates module exists and is enabled ->
-  Deduplication check (5-second window, same module+title) ->
-  Creates notification object (id, module, title, message, icon, priority, etc.) ->
-  Saves to persistent history via addon.History_AppendEntries() ->
-  Triggers NOTIFICATION_ADDED (Panel/ToggleButton update) ->
-  If toasts enabled and not DND: triggers TOAST_REQUESTED ->
-  If sounds enabled and not DND: plays priority-based sound
+    Module: BNC:Push(data)
+      -> validate module exists + enabled
+      -> deduplication check (5-second window, same module + title)
+      -> create notification object (id, module, title, message,
+         icon, priority, ...)
+      -> save to persistent history (addon.History_AppendEntries)
+      -> NOTIFICATION_ADDED -> Panel + ToggleButton update
+      -> If toasts enabled and not DND: TOAST_REQUESTED
+      -> If sounds enabled and not DND: priority-based sound
 
-MODULE PATTERN (all 20 modules follow this):
+MODULE PATTERN (all 20 follow this):
     local MODULE_ID = "mail"
     local GetSetting = BNC:CreateGetSetting(MODULE_ID)
     BNC:RegisterModule({ id = MODULE_ID, name = "Mail", icon = "..." })
@@ -489,217 +582,418 @@ MODULE PATTERN (all 20 modules follow this):
         BNC:Push({ module = MODULE_ID, title = "New Mail", ... })
     end)
 
-MODULES (20 bundled): Achievements, Auction, Calendar, Collections, Group,
-Instance, Inventory, Keystone, Loot, Mail, Professions, Quests, Rares,
-Reputation, Social, System, TalkingHead, Vault, XP, Zones
+SHIPPED MODULES (20):
+    Achievements, Auction, Calendar, Collections, Group, Instance,
+    Inventory, Keystone, Loot, Mail, Professions, Quests, Rares,
+    Reputation, Social, System, TalkingHead, Vault, XP, Zones
 
 HISTORY:
-Built-in (no separate addon). Stored in BazNotificationCenterDB.history
-as { days = { ["2026-04-07"] = { entries... } }, dayIndex = { "2026-04-07", ... } }
-Accessed via addon.History_Search(), addon.History_AppendEntries(), etc.
-Global wrappers: BNC_History_Search(), BNC_History_AppendEntries(), etc.
+Built in (no separate addon). Stored as
+    BazNotificationCenterDB.history = {
+        days     = { ["2026-04-07"] = { entries... }, ... },
+        dayIndex = { "2026-04-07", ... },
+    }
+Accessed via addon.History_Search, History_AppendEntries, etc. Global
+wrappers: BNC_History_Search / BNC_History_AppendEntries / etc.
 
 ================================================================================
-11. BAZBARS ARCHITECTURE
+11. BAZBARS
 ================================================================================
 
-Custom action bars independent of Blizzard's action bar system.
+Custom action bars independent of Blizzard's 1-120 action slots.
 
 KEY CONCEPTS:
-- Buttons use SecureActionButtonTemplate (for combat-safe casting)
-- Each bar is a frame with a grid of buttons (up to 24x24)
-- Buttons support: spells, items, macros, mounts, battlepets, equipmentsets, toys
-- Macros are stored by NAME (not index) to survive macro deletion/reordering
-- Mounts and battlepets use an internal move system (floating cursor icon)
+- Buttons use SecureActionButtonTemplate (combat-safe casting)
+- Each bar is a frame with a grid of buttons (up to 24x24, 576 buttons)
+- Button payloads: spells, items, macros, mounts, battlepets, equipment
+  sets, toys
+- Macros stored by NAME (not index) so they survive macro reordering
+- Mounts and battlepets use an internal floating-cursor move system
 
 BUTTON MOVE SYSTEM:
-When shift-dragging a button, BazBars uses a dual system:
-1. WoW cursor (PickupSpell/PickupMacro/etc.) - for dropping on default bars
-2. Internal pendingMove + floating cursor icon - for BazBar-to-BazBar moves
-A cursor watcher (C_Timer.NewTicker) detects when WoW cursor clears and
-cleans up the internal state. Swaps chain: drop A on B, B goes to internal
-cursor, click C to place B (C goes to cursor if occupied).
+Shift-drag uses a dual system:
+1. WoW cursor (PickupSpell / PickupMacro / etc.) — for default-bar drops
+2. Internal pendingMove + floating cursor icon — for BazBar-to-BazBar
+A C_Timer.NewTicker watches the WoW cursor; when it clears, internal
+state is cleaned up. Swap chain: drop A on B, B goes to internal cursor,
+click C to place B (C goes to cursor if occupied).
 
 RANGE INDICATOR:
-Uses a unified pattern: UpdateUsable() checks _outOfRange first, then
-normal usability. Out of range = icon red (0.8, 0.1, 0.1) + frame/hotkey/name.
-Full button range is always on (no toggle currently in settings).
+UpdateUsable() checks _outOfRange first, then normal usability.
+Out-of-range = icon red (0.8, 0.1, 0.1) + frame / hotkey / name.
 
 KEYBINDS:
-SetOverrideBindingClick with true priority (overrides default WoW bindings).
-Persisted in addon.db.profile.keybinds[buttonName] = key.
+SetOverrideBindingClick with priority = true (overrides default WoW
+bindings). Persisted in addon.db.profile.keybinds[buttonName] = key.
 
-MASQUE SUPPORT:
-Optional. Each bar creates a Masque group. Buttons register with Masque
-providing Icon, Cooldown, Normal, Pushed, Highlight, Count, HotKey, etc.
+MASQUE:
+Optional. Each bar creates a Masque group; buttons register Icon,
+Cooldown, Normal, Pushed, Highlight, Count, HotKey, etc.
 
 FILES:
-- Constants.lua  - BazBars global table with defaults, accepted types
-- Core.lua       - RegisterAddon, event handlers, range ticker
-- BazBars.xml    - Button template (SecureActionButtonTemplate)
-- Button.lua     - Button creation, drag/drop, textures, cooldowns, range, tooltips
-- Bar.lua        - Bar creation, layout, visibility, Edit Mode, Masque
-- Dialogs.lua    - Macrotext editor, export/import dialogs
-- Keybinds.lua   - Quick keybind mode UI
-- Options.lua    - Landing page, global options, bar options, profiles
-
-IMPORTANT: Button.lua is the largest and most complex file (~850 lines).
-The macro handling, range indicator, and move system are intricate.
-Test thoroughly after any changes to drag/drop or range code.
+    Constants.lua  - Globals, defaults, accepted button types
+    Core.lua       - RegisterAddon, event handlers, range ticker
+    BazBars.xml    - Button template (SecureActionButtonTemplate)
+    Button.lua     - Button creation, drag/drop, textures, cooldowns,
+                     range, tooltips (largest file, ~850 lines)
+    Bar.lua        - Bar creation, layout, visibility, Edit Mode, Masque
+    Dialogs.lua    - Macrotext editor, export / import dialogs
+    Keybinds.lua   - Quick keybind mode UI
+    Options.lua    - Landing, global options, bar options, profiles
 
 ================================================================================
-12. BAZDUNGEONFINDER ARCHITECTURE
+12. BAZBAGS
 ================================================================================
 
-Detached LFG queue status bar. Steals the eye icon from the micro menu.
+A unified bag panel that replaces Blizzard's combined-bag UI. All bags
++ the reagent bag in one window.
 
 KEY CONCEPTS:
-- Appears automatically when player joins LFG queue
-- Shows dungeon name, queue timer, wait estimate, role fill status
-- In-dungeon mode: boss kills, instance duration, teleport/leave buttons
-- Shared color constants in addon.COLORS (defined in Core.lua)
+- Hooks Blizzard's bag-toggle entry points: ToggleAllBags, OpenAllBags,
+  OpenBackpack, CloseAllBags. The B key + every other addon's bag
+  toggle lands here.
+- Slots use ContainerFrameItemButtonTemplate (Blizzard's secure bag-slot
+  template). Cooldown sweep, quality border, drag/drop, click-to-use,
+  shift-click-to-link all behave identically to default bags.
+- Two display modes:
+    "bags"       per-bag-type sections (Bags + Reagents) with
+                 collapsible headers — Blizzard-style default
+    "categories" auto-classify items into 6 default categories
+                 (Equipment / Consumables / Trade Goods / Quest Items /
+                 Junk / Other), separated by thin divider rows
+- Bags-mode "Separate Each Bag" sub-option renders one thin-divider
+  section per equipped bag (Backpack, Bag 1 [Wildercloth Bag], ...,
+  Reagent Bag) using the same chrome categories mode uses.
+
+CATEGORIES SYSTEM:
+- Categories are persisted/editable: rename, reorder, hide, delete,
+  create custom. Settings page is built on
+  BazCore:CreateManagedListPage.
+- Auto-classifier in Categories.Classify routes by item class +
+  quality. Lookup by internal key (not display name) so renaming
+  doesn't break the classifier.
+- Per-item pins override the classifier. Three ways to pin:
+    1. Shift+right-click on a bag item -> MenuUtil context menu
+    2. Categorize mode (middle-click portrait) -> gold "+" drop slots
+       at the end of each category's grid
+    3. Settings page input box
+
+CATEGORIZE MODE:
+Explicit toggle on middle-click of the portrait icon, OR
+`/bbg categorize`. State is in-memory only (resets on /reload). When
+on, every category divider appears (incl. empty + hidden ones), each
+with a gold "+" drop slot for click-to-pin / drag-to-pin.
+
+THREE-BUTTON PORTRAIT:
+    Left-click   -> Sort (C_Container.SortBags)
+    Middle-click -> Toggle Categorize mode
+    Right-click  -> Bag-change popup (4 equippable bag slots + reagent)
+
+LAYOUT:
+- Search box (BagSearchBoxTemplate) at top-left, filters every bag
+- Money display (ContainerMoneyFrameTemplate) at top-right
+- Tracked-currency strip at bottom (green border), removes Blizzard's
+  Show-on-Backpack cap and packs into multiple rows
+- Refresh re-anchors the frame to TOPLEFT before resizing so toggling
+  Categorize mode grows the frame downward instead of from the centre
 
 FILES:
-- Core.lua       - RegisterAddon, shared colors, confirmation dialogs
-- QueueData.lua  - Queue state tracking, LFG mode detection, role counts
-- UI_Bar.lua     - Main bar frame, eye icon, Edit Mode, instance mode
-- UI_Details.lua - Expandable details panel with role indicators
-- Settings.lua   - Landing page + settings subcategory
-
-MICRO MENU EYE:
-The eye icon (QueueStatusButtonIcon) is reparented to BDF's eyeHolder frame.
-A SetPoint hook blocks Blizzard from repositioning it. This is inherently
-fragile across patches — if Blizzard changes the eye icon structure, this breaks.
-
-INSTANCE MODE:
-Detected via IsInGroup(LE_PARTY_CATEGORY_INSTANCE). Boss tracking uses
-C_ScenarioInfo.GetScenarioStepInfo() and GetCriteriaInfo(). Stay in instance
-mode even when teleported out (still in instance group).
+    Core.lua             - RegisterAddon, slash, Settings sub-page
+    Categories.lua       - Persisted category data + auto-classifier
+    Layouts.lua          - Categories-mode + per-bag-mode rendering;
+                            divider pool, drop-slot pool
+    Bag.lua              - Panel chrome, slot management, Refresh
+    CategoriesPage.lua   - Categories settings page (built on
+                            CreateManagedListPage)
+    UserGuide.lua        - User Manual
 
 ================================================================================
-13. BAZLOOTNOTIFIER ARCHITECTURE
+13. BAZWIDGETDRAWERS
 ================================================================================
 
-Animated loot popup notifications with rarity colors.
+Slide-out side drawer that hosts a vertical stack of dockable widgets.
 
 KEY CONCEPTS:
-- Popups show items, currency, gold, reputation, XP, honor, skills
-- Accumulator system clumps rapid events (kill 4 mobs = 1 XP popup)
-- In-place popup updates (same key updates existing visible popup)
-- Object pooling for popup frames via BazCore:CreateObjectPool()
+- Anchors flush to the left or right screen edge, full height
+- Pull-tab handle (Blizzard atlas) slides the drawer open/closed
+- Smart fade system fades all chrome together while keeping widget
+  content full-opacity (so quest text, minimap, etc. stay readable)
+- Lock mode hides all chrome, tightens spacing, disables collapse
+- Multiple drawer presets with tab switching
+- Per-widget collapse, drag-to-reorder, floating mode (Edit Mode detach)
+
+WIDGET REGISTRY:
+The widget registry is provided by LibBazWidget-1.0 (embedded in
+BazCore). BWD acts as a host:
+    LibStub("LibBazWidget-1.0"):RegisterWidget(def)
+    LibStub("LibBazWidget-1.0"):RegisterDormantWidget(def, opts)
+Or via BazCore's API shim:
+    BazCore:RegisterDockableWidget(id, def)
+    BazCore:UnregisterDockableWidget(id)
+
+DORMANT WIDGETS:
+A widget can register/unregister itself based on game state. When the
+condition becomes false, the widget is fully unregistered — no slot,
+no title bar, no drawer space wasted. Used heavily in BazWidgets
+(DungeonFinder, ActiveDelve, HearthstoneCD, PullTimer, ...).
+
+WIDGET CONTRACT:
+    {
+        id, label, frame, designWidth, designHeight,
+        GetDesiredHeight = function() return h end,        -- optional
+        GetStatusText    = function() return text, r, g, b end,
+        GetOptionsArgs   = function() return optionsTable end,
+        OnDock           = function(slot) end,
+        OnUndock         = function() end,
+    }
+
+BUILT-IN WIDGETS:
+    Quest Tracker     Read-only objective tracker replica
+    Zone Text         PVP-status-coloured zone label
+    Minimap           Reparented Blizzard minimap, full functionality
+    Minimap Buttons   Adopts LibDBIcon + named addon buttons
+    Micro Menu        Reparented Blizzard micro menu bar
+    Info Bar          Clock + calendar + tracking dropdown
+
+QUEST TRACKER NOTES:
+- Pure read-only polling of C_QuestLog, C_Scenario, C_ContentTracking
+- Never reparents protected frames -> taint-safe
+- M+ Challenge Mode block (keystone timer + affixes + death count)
+- TomTom + Zygor waypoint integration for super-tracked quests
+- Hide Default Tracker option (default on)
+
+================================================================================
+14. BAZWIDGETS
+================================================================================
+
+A widget pack with 26 ready-to-dock widgets for BazWidgetDrawers,
+covering activity, character, currency, navigation, weekly progress,
+and utilities. Many are dormant (active only when relevant — queued,
+in combat, in a delve, hearthstone on cooldown, ...).
+
+REGISTRATION:
+Each widget file uses LibBazWidget-1.0 directly:
+    local LBW = LibStub("LibBazWidget-1.0")
+    LBW:RegisterWidget({ ... })           -- always-on
+    LBW:RegisterDormantWidget(def, {       -- context-active
+        events    = { "...", "..." },
+        condition = function() return ShouldBeActive() end,
+    })
+
+WIDGET CATEGORIES:
+- Activity & Group:    DungeonFinder, PullTimer, ActiveDelve,
+                        DelveTimer, Companion, BountifulTracker
+- Character & Gear:    Repair, StatSummary, ItemLevel, TrinketTracker,
+                        FreeBagSlots, HearthstoneCD, CollectionCounter
+- Currency & Economy:  GoldTracker, CurrencyBar, TrackedReputation
+- Navigation:          Coordinates, SpeedMonitor
+- Weekly Progress:     WeeklyChecklist, ResetTimers
+- Utilities:           NotePad, Stopwatch, TodoList, Calculator,
+                        Performance, Tooltip
+
+The Tooltip widget hooks GameTooltip_SetDefaultAnchor and reroutes
+default-anchored tooltips into the drawer slot. ~80 % coverage; addons
+with hardcoded ANCHOR_RIGHT-style anchors aren't redirected.
+
+================================================================================
+15. BAZBROKERWIDGET
+================================================================================
+
+Bridges LibDataBroker (LDB) feeds into BazWidgetDrawers. Every
+LDB-publishing addon (Bagnon, Recount, Skada, BugSack, almost any addon
+with a minimap data button) shows up as its own dockable BWD widget.
+
+KEY CONCEPTS:
+- One BWD widget per LDB feed
+- Live updates via LDB attribute callbacks (text, value, icon, label)
+- Late-registration aware: subscribes to
+  LibDataBroker_DataObjectCreated so feeds registered after login
+  appear without a /reload
+- Click and tooltip forwarding: clicks invoke the feed's OnClick;
+  hover shows the feed's OnTooltipShow / OnEnter
+- Both LDB types supported: data source (text + value) and launcher
+  (icon-only)
 
 FILES:
-- Core.lua    - RegisterAddon, anchor frame, Edit Mode, settings, landing page
-- Popup.lua   - Popup creation, animation, pooling, activePopupsByKey
-- Events.lua  - Chat event handlers with Desecret() for Midnight taint
+    Core.lua        - RegisterAddon, settings page, slash commands
+    Widget.lua      - Per-feed widget construction, LDB subscriptions
+    UserGuide.lua
+
+================================================================================
+16. BAZLOOTNOTIFIER  (maintenance mode)
+================================================================================
+
+NOTE: BazLootNotifier is in maintenance mode. Its event coverage has
+been superseded by BazNotificationCenter, which provides a more
+comprehensive toast + history system covering loot, XP, reputation,
+currency, honor, achievements, rare spawns, professions, and more. New
+installs are encouraged to use BNC. BLN remains supported for existing
+users; install BNC alongside BLN and the smart handoff routes each
+event category to the right addon so users never see duplicate popups.
+BLN will continue to receive compatibility fixes for new WoW patches.
+
+KEY CONCEPTS:
+- Animated popups for items, currency, gold, reputation, XP, honor,
+  profession crafts
+- Accumulator clumps rapid events (kill 4 mobs = 1 XP popup with the
+  total)
+- In-place popup updates: same event key updates an existing visible
+  popup
+- Object pooling for popup frames via BazCore:CreateObjectPool
 
 DESECRET PATTERN (Events.lua):
-Every chat handler uses:
+Every chat event handler launders the inputs:
     local function Desecret(val)
         if val == nil then return nil end
         local ok, clean = pcall(string.format, "%s", val)
         return ok and clean or nil
     end
-This is the ONLY reliable way to strip Midnight secret string taint.
 
 ACCUMULATOR:
-AccumulatePopup(key, label, desc, icon, quality, amount) batches rapid events.
-Timer extends for full display+fade duration so accumulator stays alive while
-popup is visible. Uses addon:UpdateOrCreatePopup for in-place updates.
+AccumulatePopup(key, label, desc, icon, quality, amount) batches events
+inside a configurable window. Timer extends for full display + fade so
+the accumulator stays alive while the popup is visible.
+
+SMART HANDOFF:
+On load, BLN checks IsAddOnLoaded("BazNotificationCenter"). For each
+matching category, BLN silently disables that category and routes
+events through BazCore:PushNotification. Users mix and match per
+category.
+
+FILES:
+    Core.lua    - RegisterAddon, anchor frame, Edit Mode, settings,
+                   landing page
+    Popup.lua   - Popup creation, animation, pooling, activePopupsByKey
+    Events.lua  - Chat event handlers with Desecret() laundering
 
 ================================================================================
-14. BAZFLIGHTZOOM ARCHITECTURE
+17. BAZFLIGHTZOOM
 ================================================================================
 
-Auto-zoom camera and minimap when flying.
+Auto camera + minimap zoom on flying mounts.
 
-Single file addon (Core.lua). Features:
-- Camera zoom via SetCVar("cameraDistanceMaxZoomFactor") + MoveViewOutStart
-- ZoomCameraTo() helper for absolute camera positioning
-- SmoothZoomTo() for gradual transitions
-- Minimap zoom with 0.2s delay (Blizzard overrides immediate SetZoom calls)
-- Ground mount support with separate distance setting
-- Uses raw event frame for PLAYER_MOUNT_DISPLAY_CHANGED (not BazCore:On)
-
-MOUNT DETECTION:
-IsOnFlyingMount() scans player buffs via C_UnitAuras.GetBuffDataByIndex(),
-matches spellId against C_MountJournal mount spell IDs, checks mount type
-against FLYING_MOUNT_TYPES table. Secret number taint on spellId is handled
-via pcall(string.format, "%d", ...).
+Single-file addon (Core.lua). Behaviour:
+- IsOnFlyingMount() scans player buffs via C_UnitAuras.GetBuffDataByIndex,
+  matches spellId against C_MountJournal mount spell IDs, checks mount
+  type against FLYING_MOUNT_TYPES
+- Camera zoom via SetCVar("cameraDistanceMaxZoomFactor") +
+  MoveViewOutStart (or ZoomCameraTo helper)
+- Smooth zoom transitions via SmoothZoomTo
+- Minimap zoom uses a 0.2s delay (Blizzard overrides immediate SetZoom)
+- Optional ground-mount support with separate distance setting
+- Raw event frame for PLAYER_MOUNT_DISPLAY_CHANGED (not BazCore:On)
+- Secret number taint on aura spellId is laundered via
+  pcall(string.format, "%d", ...)
 
 ================================================================================
-15. BAZMAP ARCHITECTURE
+18. BAZMAP
 ================================================================================
 
-Resizable map and quest log window.
+Resizable World Map and Quest Log window with independent layouts per
+mode.
 
-Single file addon (BazMap.lua). Uses a SetAttribute approach to free the map:
-- WorldMapFrame:SetAttribute("UIPanelLayout-enabled", false)
-- WorldMapFrame:SetAttribute("UIPanelLayout-area", nil)
-- WorldMapFrame:SetAttribute("UIPanelLayout-allowOtherPanels", true)
-- These attributes free the map from Blizzard's panel management system
+Single-file addon (BazMap.lua). Frees the map from Blizzard's panel
+system via SetAttribute:
+    WorldMapFrame:SetAttribute("UIPanelLayout-enabled", false)
+    WorldMapFrame:SetAttribute("UIPanelLayout-area", nil)
+    WorldMapFrame:SetAttribute("UIPanelLayout-allowOtherPanels", true)
 
-KEY TRICKS:
+KEY DETAILS:
 - 0.1s delay on attribute setting (Blizzard overrides immediate calls)
 - lastKnownMode tracks map vs quest mode (survives QuestMapFrame:Hide)
-- WorldMapFrame:OnFrameSizeChanged() refreshes pin positions after scale change
+- WorldMapFrame:OnFrameSizeChanged() refreshes pin positions after a
+  scale change
 - Hooks ToggleWorldMap and ToggleQuestLog at file scope
-- BlackoutFrame and TiledBackground hidden for clean look
+- BlackoutFrame and TiledBackground hidden for a clean look
 - Maximize hook forces Minimize() to prevent fullscreen
 
 MODE DETECTION:
-M key = map mode, L key = quest log mode. Each mode has independent
-scale and position saved in the profile. Deferred mode detection via
-C_Timer.After(0) for reliable QuestMapFrame state.
+M = map mode, L = quest log mode. Each mode saves its own scale +
+position. Deferred mode detection via C_Timer.After(0) for reliable
+QuestMapFrame state.
 
 ================================================================================
-16. FILE LOCATIONS & REPO STRUCTURE
+19. BAZMAPPORTALS
+================================================================================
+
+Mage-only addon: clickable portal/teleport pins on the world map.
+
+KEY CONCEPTS:
+- Pins appear on every map where a mage teleport or portal lands
+- Left-click casts the teleport (you alone)
+- Right-click casts the portal (group members can step through)
+- Pins only appear for spells you actually know
+- Faction-restricted destinations only show on the appropriate faction
+- Coordinate overrides for tricky maps (Silvermoon, Quel'Thalas,
+  Midnight Eastern Kingdoms zones)
+
+SLASH COMMANDS:
+    /mp                Open settings
+    /mp set <city>     Save a custom coord override at the cursor map position
+    /mp clear <city|all>   Clear an override (or all)
+    /mp dump           Print current overrides
+    /mp info           Show diagnostic info about the current map
+    /mapportals        Alias
+
+================================================================================
+20. REPO STRUCTURE
 ================================================================================
 
 LIVE ADDON FOLDER:
     C:/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns/
 
-REPO FOLDERS:
-    C:/Users/brett/BazCore_repo/
-    C:/Users/brett/BazBars_repo/
-    C:/Users/brett/BazDungeonFinder_repo/
-    C:/Users/brett/BazMap_repo/
-    C:/Users/brett/BazLootNotifier_repo/
-    C:/Users/brett/BazFlightZoom_repo/
-    C:/Users/brett/BazNotificationCenter_repo/
+REPO FOLDERS (all under C:/Users/brett/):
+    BazCore_repo/
+    BazBars_repo/
+    BazBags_repo/
+    BazWidgetDrawers_repo/      (renamed from BazDrawer_repo)
+    BazWidgets_repo/
+    BazBrokerWidget_repo/
+    BazNotificationCenter_repo/
+    BazLootNotifier_repo/
+    BazFlightZoom_repo/
+    BazMap_repo/
+    BazMapPortals_repo/
 
-CRITICAL: Always edit files in the REPO folder, then copy to the live
-AddOns folder for testing. The game loads from AddOns, not from the repo.
-After testing, commit and push from the repo folder.
+RULE: Always edit files in the REPO folder. The live AddOns folder is
+a deploy target — copy from repo to live for testing. After testing,
+commit + tag + push from the repo.
 
-COPY TO LIVE PATTERN:
+COPY-TO-LIVE PATTERN:
     cp "C:/Users/brett/AddonName_repo/File.lua" \
        "C:/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns/AddonName/File.lua"
 
-FULL ADDON DEPLOY:
-    rm -rf "$LIVE/AddonName" && cp -r "C:/Users/brett/AddonName_repo" "$LIVE/AddonName"
+FULL ADDON DEPLOY (rare — full re-sync):
+    robocopy "C:/Users/brett/AddonName_repo" \
+             "C:/Program Files (x86)/World of Warcraft/_retail_/Interface/AddOns/AddonName" \
+             /E /XD .git .github
+
+DO NOT use /MIR — it deletes destination files that don't exist in
+source, which has destroyed local addon state in the past (libs that
+the repo .gitignores got nuked when reverting from a junction-point
+experiment; that's how the BazBrokerWidget Libs/ recovery happened).
 
 ================================================================================
-17. BUILD, RELEASE & CURSEFORGE
+21. BUILD, RELEASE & CURSEFORGE
 ================================================================================
 
 RELEASE PROCESS:
-1. Edit code in repo folder
-2. Copy to live AddOns folder
-3. /reload in WoW to test
-4. Commit changes to repo
-5. Bump version in .toc file
-6. Update CHANGELOG.md (add entry for new version)
-7. Commit the version bump + changelog
-8. Create git tag matching the version: git tag 021
-9. Push commit AND tag: git push && git push origin 021
-10. GitHub Actions CI automatically packages and uploads to CurseForge
+1.  Edit code in the repo folder
+2.  Copy to the live AddOns folder
+3.  /reload to test
+4.  Commit changes (focused, descriptive subject)
+5.  Bump the .toc Version
+6.  Update CHANGELOG.md (entry at the TOP of the file)
+7.  Commit the version bump + changelog
+8.  Tag with the new version (plain number, no prefix): git tag 052
+9.  Push commit AND tag: git push && git push origin 052
+10. CI (.github/workflows/release.yml) packages and uploads to CurseForge
 
-CI WORKFLOW (.github/workflows/release.yml):
-- Triggers on tag push (any tag)
+CI WORKFLOW:
+- Triggered on tag push (any tag)
 - Uses BigWigsMods/packager@v2 with -g retail
 - Requires CF_API_KEY secret on the repo
-- Also creates GitHub Release with zip
+- Also creates a GitHub Release with the zip
 
 .pkgmeta FORMAT:
     package-as: AddonName
@@ -709,24 +1003,35 @@ CI WORKFLOW (.github/workflows/release.yml):
       - .pkgmeta
       - LICENSE
 
-CHANGELOG ON CURSEFORGE:
-The packager auto-generates changelog from git commit messages between tags.
-Do NOT use manual-changelog in .pkgmeta. Do NOT include
-"Co-Authored-By: Claude..." in commit messages (it shows in CurseForge changelog).
+CURSEFORGE CHANGELOG:
+The packager auto-generates the CurseForge changelog from git commits
+between tags. Don't add manual-changelog to .pkgmeta. Don't include
+"Co-Authored-By:" in commit messages — they show in the CF changelog.
 
 VERSION FORMAT:
-Simple incrementing numbers: 001, 002, ..., 020, 021. No semantic versioning.
-Every change gets a version bump, no matter how small.
+Plain incrementing numbers — 001, 002, ..., 052. No semantic versioning.
+Every change gets a bump, no matter how small.
 
 CURSEFORGE DESCRIPTIONS:
-Written in markdown. Use shields.io dynamic badges for version:
-    ![Version](https://img.shields.io/github/v/tag/bazsec/AddonName?label=Version&color=orange)
+README.md is the source of truth and is rendered on the CurseForge
+project page automatically. CurseForge's markdown is similar to
+GitHub's but mishandles some HTML — prefer plain markdown over
+<p align="center">-style HTML. Use shields.io badges for version /
+license / WoW version.
 
-Important: CurseForge markdown does NOT support angle brackets in tables.
-Use square brackets or underscores instead of %20 in badge URLs.
+MULTI-ADDON RELEASES:
+When BazCore changes affect dependents:
+1. Push BazCore first (others depend on it)
+2. Push each dependent addon after BazCore
+3. Each addon gets its own version bump and tag
+
+If a tag is pushed with a wrong .toc (forgot to bump before commit):
+1. Bump the .toc and commit "AddonName.toc: bump version to NNN"
+2. git tag -d NNN  &&  git push origin :refs/tags/NNN
+3. git tag NNN     &&  git push origin master && git push origin NNN
 
 ================================================================================
-18. CODING CONVENTIONS
+22. CODING CONVENTIONS
 ================================================================================
 
 GENERAL:
@@ -734,311 +1039,112 @@ GENERAL:
 - Local variables preferred over globals
 - File-level locals for performance (e.g., local GetTime = GetTime)
 - Section separators: ----------- (75 dashes)
-- No emojis in code or files unless user explicitly requests
+- No emojis in code or files unless the user explicitly requests them
 
 NAMING:
-- Addon objects: local addon = BazCore:GetAddon("Name")
-- Constants: UPPER_SNAKE_CASE
-- Functions: PascalCase for public, camelCase for local
-- Variables: camelCase
-- Saved variables: AddonNameDB or AddonNameSV
-- Options table keys: hyphen separator (AddonName-Settings, AddonName-Profiles)
+- Addon objects:     local addon = BazCore:GetAddon("Name")
+- Constants:         UPPER_SNAKE_CASE
+- Functions:         PascalCase for public, camelCase for local
+- Variables:         camelCase
+- Saved variables:   AddonNameDB
+- Options table keys: hyphen separator (AddonName-Settings)
 
 OPTIONS TABLES:
-- Order values: use gaps (1, 10, 20, 30, 90) for future insertions
-- Headers: type = "header", name = "Section Name"
-- Empty header (order = 90, name = "") to separate action buttons
-- Descriptions: default font is GameFontNormal (medium), use fontSize = "small" for smaller
+- order values: use gaps (1, 10, 20, 30, 90) for future insertions
+- Section headers: type = "header", name = "Section Name"
+- Empty header (order = 90, name = "") to break before action buttons
+- Descriptions: default font is medium; fontSize = "small" for smaller
+- Use rich content blocks (paragraph, h3, note, ...) when documentation
+  context helps the user — don't be afraid to mix them with form widgets
 
 GIT:
-- Commit messages: "AddonName vXXX - Brief description" for releases
-- No Co-Authored-By lines (shows in CurseForge changelog)
-- Always create NEW commits, never amend
-- Never force push to master
-- Tag format: plain number matching TOC version (e.g., 021)
+- Commit subjects: focused, ~50-70 chars, namespace prefix common
+  ("Options/Range: ...", "BazBags Categories: ...")
+- No "Co-Authored-By:" lines (visible on CurseForge)
+- Always create NEW commits, never amend pushed commits
+- Never force-push to master
+- Tag format: plain number matching .toc Version (e.g., 052)
+- For tag-position fixes: delete + recreate + push the tag (force-push
+  the tag only, never the branch)
 
 ================================================================================
-19. KNOWN ISSUES & GOTCHAS
+23. KNOWN ISSUES & GOTCHAS
 ================================================================================
 
 MIDNIGHT SECRET TAINT:
 - tostring() does NOT strip taint — use string.format("%s", val) via pcall
 - Numbers can also be tainted — use string.format("%d", val) via pcall
-- Setting a tainted string as a button attribute causes SILENT failure
-- Always desecret before comparing, concatenating, or setting attributes
-
-BAZDUNGEONFINDER EYE ICON:
-- Fragile across patches — Blizzard may change QueueStatusButton structure
-- SetPoint hook blocks repositioning but can be overridden by Edit Mode exit
+- Setting a tainted string as a button attribute = SILENT failure
+- Always launder before comparing, concatenating, or setting attributes
 
 BAZBARS SETOVERRIDEBINDINGCLICK:
-- Must use true priority (not false) to override default WoW bindings
-- Combat guard needed — defer to PLAYER_REGEN_ENABLED if in combat
+- Use priority = true (not false) to override default WoW bindings
+- Combat guard: defer to PLAYER_REGEN_ENABLED if in combat
 - ClearOverrideBindings(keybindOwner) before restoring all
 
 BAZMAP WORLDMAPFRAME:
-- Load-on-demand: must check IsAddOnLoaded or use ADDON_LOADED listener
+- Load-on-demand: check IsAddOnLoaded or use ADDON_LOADED listener
 - SetAttribute calls need 0.1s delay (Blizzard overrides immediate calls)
 - OnFrameSizeChanged() required after scale change to refresh pins
+
+BAZBAGS:
+- ContainerFrameItemButtonTemplate's Initialize() reads
+  parent:IsCombinedBagContainer() — bag-context frames must return true
+  here to get the leather/brown empty-slot art (otherwise default blue
+  squares appear)
+- Refresh re-anchors the frame to TOPLEFT before resizing so toggling
+  Categorize mode grows downward instead of expanding from the centre
+
+BAZCORE OPTIONS PANEL:
+- Auto-read icon from TOC: C_AddOns.GetAddOnMetadata(name, "IconTexture")
+  (returns string, tonumber() it for numeric IDs)
+- The standalone window uses CreateScrollCanvas with plain ScrollFrame +
+  MinimalScrollBar (not UIPanelScrollFrameTemplate)
+- BuildListDetailPanel expects either a wrapper-shape group whose
+  `args` are the leaf groups (BWD Drawers, BazBars Bars) OR multiple
+  sibling top-level groups that get wrapped in a synthetic host
+  (CreateTwoPanelLayout's defensive fallback)
 
 CURSEFORGE UPLOAD:
 - Requires CF_API_KEY secret on the GitHub repo
 - If files don't appear: check repo secrets, check CI logs
 - New dependencies (like BazCore) may trigger moderation review
 
-BAZCORE OPTIONSPANEL:
-- Content width must be > 500px for two-column layout to activate
-- Auto-read icon from TOC: C_AddOns.GetAddOnMetadata(name, "IconTexture")
-- Numeric texture IDs from TOC come as strings — tonumber() them
-- CreateScrollCanvas uses plain ScrollFrame + MinimalScrollBar (not UIPanelScrollFrameTemplate)
+LIBS FOLDER GOTCHA:
+Some addons (BazBrokerWidget) have a .gitignore that excludes Libs/
+because the .pkgmeta packager downloads them at release time. The libs
+DO NOT exist in the repo working tree. If you ever rmdir the live
+folder and copy from repo, you'll lose the libs and the addon won't
+load. Either keep the live folder intact or restore libs from a sibling
+addon (BazCore has LibStub; DelveCompanion / BlizzMove / etc. have
+CallbackHandler-1.0 and LibDataBroker-1.1).
 
 ================================================================================
-20. PENDING FEATURES
+24. BLIZZARD SOURCE REFERENCE
 ================================================================================
 
-BNC GLOBAL OPTIONS:
-A globals page type where global settings (like toast duration) override
-per-module settings. Each global setting has an "Override modules" checkbox.
-When checked, the global value forces all modules to use it regardless of
-their local setting. This should be a BazCore standard page type so any
-addon can use the pattern.
-
-BNC FULL BAZCORE INTEGRATION (completed):
-BNC now uses BazCore:RegisterAddon() for lifecycle, BazCore events for
-WoW events, BazCore DB proxy for profiles. Internal CallbackRegistry
-kept for BNC-specific custom events.
-
-BAZCORE STANDARD PAGE TYPES:
-- Landing Page (CreateLandingPage) - DONE
-- Settings Page (two-column panels) - DONE
-- List + Detail Page (left panel list, right panel settings) - EXISTS (BazBars uses it)
-- Profiles Page (GetProfileOptionsTable) - DONE
-- Global Options Page - PLANNED (see BNC Global Options above)
-
-================================================================================
-21. DETAILED RELEASE WORKFLOW
-================================================================================
-
-This is the EXACT process for releasing an update. Follow every step.
-
-BEFORE CODING:
-1. Always edit files in the REPO folder (C:/Users/brett/AddonName_repo/)
-2. NEVER edit files directly in the live AddOns folder
-
-DEVELOPMENT CYCLE:
-1. Make code changes in the repo folder
-2. Copy changed files to live: cp "repo/File.lua" "AddOns/AddonName/File.lua"
-3. /reload in WoW to test
-4. Iterate until working
-5. If multiple files changed, copy ALL of them before /reload
-
-PREPARING TO PUSH:
-1. Bump the version in the .toc file: ## Version: XXX -> ## Version: XXX+1
-2. Update CHANGELOG.md — add new version entry at the TOP of the file:
-       ## XXX - Brief Title
-       - Change 1
-       - Change 2
-3. The README.md version badge auto-updates from GitHub tags (dynamic shields.io)
-   so you do NOT need to manually update README version numbers
-4. Do NOT include "Co-Authored-By: Claude..." in commit messages — it shows
-   in the CurseForge changelog
-
-PUSHING:
-    cd C:/Users/brett/AddonName_repo
-    git add -A
-    git commit -m "AddonName vXXX - Brief description of changes"
-    git tag XXX
-    git push
-    git push origin XXX
-
-AFTER PUSHING:
-- GitHub Actions CI runs automatically (triggered by tag push)
-- CI packages the addon and uploads to CurseForge
-- Verify: gh run list --limit 1 (should show success)
-- Check CI logs if needed: gh run view <id> --log | grep -i "curse\|upload"
-
-CURSEFORGE CHANGELOG:
-The BigWigsMods packager auto-generates the changelog from git commits
-between the previous tag and the current tag. This means:
-- Only commits since the last tag appear in the CurseForge changelog
-- Do NOT use manual-changelog in .pkgmeta (we removed it from all repos)
-- Keep commit messages clean and descriptive — they ARE the changelog
-- If the changelog shows multiple versions, the .pkgmeta is wrong
-
-CURSEFORGE DESCRIPTION:
-- Written in markdown, pasted manually on curseforge.com
-- Do NOT include shields.io image badges (CurseForge doesn't render them well)
-- Use the standard format (see existing descriptions for reference)
-- Update when significant features are added
-
-MULTI-ADDON RELEASES:
-When BazCore changes affect all addons:
-1. Push BazCore first (other addons depend on it)
-2. Push dependent addons after BazCore
-3. Each addon gets its own version bump and tag
-4. Use a for loop for batch pushes if needed
-
-COMMON MISTAKES:
-- Forgetting to copy files to live before /reload (tests old code)
-- Forgetting to push the tag (CI doesn't trigger on commit-only pushes)
-- Forgetting CF_API_KEY secret on a new repo
-- Using git tag on an already-existing tag (delete old tag first or bump version)
-
-================================================================================
-22. BAZCORE DESIGN PHILOSOPHY (DETAILED)
-================================================================================
-
-BazCore exists because of a fundamental belief: addon code should focus on
-WHAT it does, not HOW it renders settings, manages profiles, handles events,
-or integrates with the WoW UI framework. BazCore handles all the "how."
-
-PRINCIPLE 1: SINGLE SOURCE OF TRUTH
-Every visual element, every UI pattern, every settings widget comes from
-BazCore. If you want to change how headers look — change it in BazCore's
-OptionsPanel.lua CreateHeaderWidget function. Every addon updates.
-If you want to change how the minimap button tooltip looks — change it in
-BazCore's MinimapButton.lua. Every addon updates.
-
-Individual addons should NEVER:
-- Create their own scrollable settings frames
-- Define their own checkbox/slider/dropdown widgets
-- Style their own options panel headers or panels
-- Build their own profile management UI
-- Register directly with WoW's Settings API (use BazCore:AddToSettings)
-
-PRINCIPLE 2: DECLARATIVE OVER IMPERATIVE
-Addons describe WHAT they want, not HOW to build it:
-
-    BazCore:CreateLandingPage("MyAddon", {
-        description = "What it does",
-        features = "Key features",
-        guide = { { "Step", "How" } },
-        commands = { { "/cmd", "What" } },
-    })
-
-Not:
-    local frame = CreateFrame("Frame", ...)
-    local title = frame:CreateFontString(...)
-    title:SetFontObject(GameFontNormalLarge)
-    title:SetTextColor(1, 0.82, 0)
-    -- 50 more lines of manual frame building
-
-PRINCIPLE 3: CONVENTION OVER CONFIGURATION
-Every addon follows the same structure:
-- Landing page as main (via CreateLandingPage)
-- Settings as first subcategory
-- Optional custom subcategories
-- Profiles as last subcategory
-
-Every addon uses the same patterns:
-- BazCore:RegisterAddon() for lifecycle
-- addon:GetSetting()/SetSetting() for database access
-- addon:On() for WoW events
-- BazCore:RegisterOptionsTable() for settings
-- BazCore:RegisterEditModeFrame() for draggable UI
-
-PRINCIPLE 4: PROGRESSIVE ENHANCEMENT
-BazCore provides simple defaults that work out of the box:
-- Icon and version auto-read from TOC (no manual specification needed)
-- Two-column panels auto-activate when content is wide enough
-- Profile proxy auto-wired when profiles = true
-- Slash commands auto-generate help text
-
-Addons can override or extend, but the defaults are good enough for most cases.
-
-PRINCIPLE 5: MODERN APIS ONLY
-WoW has evolved. We use Dragonflight+ APIs exclusively:
-- Settings API (not InterfaceOptionsFrame)
-- MenuUtil.CreateContextMenu (not UIDropDownMenu)
-- MinimalSliderWithSteppersTemplate (not old Slider templates)
-- MinimalScrollBar (not UIPanelScrollFrameTemplate)
-- C_Spell, C_Item, C_MountJournal (not GetSpellInfo global)
-- EventUtil.ContinueOnAddOnLoaded (not manual ADDON_LOADED frames)
-- NineSliceUtil for Edit Mode overlays
-- pcall(string.format) for Midnight secret taint handling
-
-PRINCIPLE 6: FAIL GRACEFULLY
-Every pcall, every nil check, every "if not X then return end" is intentional.
-WoW addons run in a shared Lua environment where one error can cascade.
-BNC uses SafeCall (xpcall with error handler) for all internal event callbacks.
-BazCore uses pcall for event registration (silently handles non-existent events).
-
-================================================================================
-23. BLIZZARD SOURCE REFERENCE
-================================================================================
-
-The user has Blizzard's interface code downloaded locally at:
+Blizzard's interface code is downloaded locally at:
     C:/Program Files (x86)/World of Warcraft/_retail_/BlizzardInterfaceCode/
 
-This contains the full source for all Blizzard addons and FrameXML:
-    .../Interface/AddOns/Blizzard_ActionBar/
-    .../Interface/AddOns/Blizzard_Settings/
-    .../Interface/AddOns/Blizzard_SharedXML/
-    .../Interface/AddOns/Blizzard_FrameXML/
-    .../Interface/AddOns/Blizzard_MacroUI/
-    etc.
-
-USE THIS for:
-- Understanding how Blizzard implements action buttons, scroll bars, etc.
-- Finding the correct template names (e.g., MinimalScrollBar, MinimalSliderWithSteppersTemplate)
-- Checking what APIs are available and how they work
-- Debugging taint issues by reading Blizzard's secure code
-- Understanding Edit Mode frame registration patterns
+Useful for:
+- Understanding how Blizzard implements action buttons, scroll bars,
+  Edit Mode frame registration, etc.
+- Finding the correct template names (MinimalScrollBar,
+  MinimalSliderWithSteppersTemplate, ContainerFrameItemButtonTemplate,
+  ContainerMoneyFrameTemplate, BagSearchBoxTemplate, ...)
+- Checking what APIs are available and how Blizzard uses them
+- Debugging taint by reading the secure code path
+- Understanding nine-slice / atlas-based UI work
 
 COMMONLY REFERENCED FILES:
-- Blizzard_ActionBar/Shared/ActionButton.lua - Blizzard's action button implementation
-- Blizzard_SharedXML/SecureScrollTemplates.xml - Scroll frame templates
-- Blizzard_SharedXML/Shared/Scroll/MinimalScrollBar.xml - Modern scroll bar
-- Blizzard_SharedXML/Shared/Scroll/ScrollUtil.lua - ScrollUtil.InitScrollFrameWithScrollBar
-- Blizzard_SharedXML/NineSliceUtil.lua - Nine-slice overlay system
-- Blizzard_UIParent/Mainline/UIParent.lua - MAX_ACCOUNT_MACROS, MAX_CHARACTER_MACROS
-
-================================================================================
-24. ADDON-SPECIFIC SAVED VARIABLE NOTES
-================================================================================
-
-BAZCORE (BazCoreDB):
-    BazCoreDB = {
-        minimap = { hide = false },
-        welcomeMessage = true,
-        minimapAngle = 225,
-    }
-
-BAZBARS (BazBarsDB):
-    BazBarsDB = {
-        activeProfile = "Default",
-        profiles = {
-            Default = {
-                bars = { [1] = { id=1, cols=6, rows=1, ... }, ... },
-                keybinds = { BazBarsButton1 = "Q", ... },
-                fullRangeColor = true,
-                showTooltips = true,
-                showKeybindText = true,
-                showMacroNames = true,
-            },
-        },
-        assignments = {},
-    }
-
-BAZNOTIFICATIONCENTER (BazNotificationCenterDB):
-    BazNotificationCenterDB = {
-        activeProfile = "Default",
-        profiles = {
-            Default = {
-                position = "TOPLEFT",
-                toastDuration = 5,
-                toastsEnabled = true,
-                soundEnabled = true,
-                modules = { mail = { enabled = true, ... }, ... },
-                history = { days = {}, dayIndex = {} },
-                ...
-            },
-        },
-        assignments = {},
-    }
-
-NOTE: BNC's addon.db is flattened to point directly at the active profile
-(addon.db = bncAddon.db.profile) so addon.db.position works without .profile.
+    Blizzard_ActionBar/Shared/ActionButton.lua
+    Blizzard_SharedXML/SecureScrollTemplates.xml
+    Blizzard_SharedXML/Shared/Scroll/MinimalScrollBar.xml
+    Blizzard_SharedXML/Shared/Scroll/ScrollUtil.lua
+    Blizzard_SharedXML/NineSliceUtil.lua
+    Blizzard_UIParent/Mainline/UIParent.lua
+    Blizzard_Containers/ContainerFrame.lua
+    Blizzard_TokenUI/...
 
 ================================================================================
 END OF DOCUMENT
