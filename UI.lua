@@ -461,7 +461,7 @@ function BazCore:CreatePortraitWindow(globalName, opts)
         local hit = CreateFrame("Button", nil, f.PortraitContainer)
         hit:SetAllPoints(f.PortraitContainer.portrait)
         hit:SetFrameLevel((f.PortraitContainer:GetFrameLevel() or 400) + 1)
-        hit:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        hit:RegisterForClicks("LeftButtonUp", "MiddleButtonUp", "RightButtonUp")
 
         if opts.portraitOnClick then
             hit:SetScript("OnClick", opts.portraitOnClick)
