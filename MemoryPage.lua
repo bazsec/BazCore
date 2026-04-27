@@ -16,7 +16,7 @@ if not O then return end
 -- Tunables
 ---------------------------------------------------------------------------
 
-local UPDATE_INTERVAL = 0.5    -- seconds between memory polls
+local UPDATE_INTERVAL = 1.0    -- seconds between memory polls
 local HISTORY_LEN     = 120    -- 60 seconds of samples at 0.5 Hz
 local SUMMARY_HEIGHT  = 78
 local ROW_HEIGHT      = 26
@@ -81,18 +81,26 @@ end
 -- is our cue to drop the subscription).
 ---------------------------------------------------------------------------
 
-local subscribers = {}
+local subscribers   = {}
+local activeTicker  -- set while at least one live subscriber exists
+local cachedTracked -- GetTrackedAddons() result, invalidated on addon register
 
-local function Subscribe(frame, refresh)
-    subscribers[#subscribers + 1] = { frame = frame, refresh = refresh }
-    refresh()  -- paint once immediately so the block isn't blank
+local function InvalidateTracked() cachedTracked = nil end
+
+local function GetTrackedAddonsCached()
+    -- Cache the sorted list across ticks. Without this, each tick
+    -- (twice per second when the page was open, plus the unconditional
+    -- background ticker) allocated a fresh `list` + `seen` table -
+    -- ~10 strings per call and a table.sort - constant garbage.
+    if not cachedTracked then cachedTracked = GetTrackedAddons() end
+    return cachedTracked
 end
 
 local function CollectSample()
     if UpdateAddOnMemoryUsage then UpdateAddOnMemoryUsage() end
 
     local total = 0
-    for _, name in ipairs(GetTrackedAddons()) do
+    for _, name in ipairs(GetTrackedAddonsCached()) do
         local kb = (GetAddOnMemoryUsage and GetAddOnMemoryUsage(name)) or 0
         state.current[name] = kb
         if (state.peak[name] or 0) < kb then state.peak[name] = kb end
@@ -106,28 +114,58 @@ local function CollectSample()
 end
 
 local function Tick()
-    CollectSample()
-
-    -- Iterate, calling live subscribers and dropping orphaned ones.
-    -- ClearChildren reparents to nil so :GetParent() reports nil for
-    -- frames whose page was unloaded - easy liveness signal.
+    -- Prune dead subscribers. ClearChildren reparents to nil so
+    -- :GetParent() reports nil for frames whose page was unloaded -
+    -- easy liveness signal. Build the live array first so we can
+    -- early-out without doing CollectSample work when nobody's
+    -- listening.
     local live = {}
     for _, sub in ipairs(subscribers) do
         if sub.frame and sub.frame:GetParent() then
-            sub.refresh()
             live[#live + 1] = sub
         end
     end
     subscribers = live
+
+    if #subscribers == 0 then
+        -- Nobody's watching. Stop the ticker entirely - it'll restart
+        -- when something subscribes again. Previously this ticker
+        -- fired forever at 2 Hz, calling the expensive
+        -- UpdateAddOnMemoryUsage() unconditionally and chewing through
+        -- ~3 MB/s of Lua heap as background allocation pressure.
+        if activeTicker then
+            activeTicker:Cancel()
+            activeTicker = nil
+        end
+        return
+    end
+
+    CollectSample()
+    for _, sub in ipairs(subscribers) do
+        sub.refresh()
+    end
 end
 
--- Start sampling at file load. Cheap (~tens of microseconds per tick)
--- and means the graph already has data populated when the user first
--- opens the page rather than starting blank for 60 seconds.
-CollectSample()
-if C_Timer and C_Timer.NewTicker then
-    C_Timer.NewTicker(UPDATE_INTERVAL, Tick)
+local function StartTicker()
+    if activeTicker then return end
+    if not (C_Timer and C_Timer.NewTicker) then return end
+    activeTicker = C_Timer.NewTicker(UPDATE_INTERVAL, Tick)
 end
+
+local function Subscribe(frame, refresh)
+    -- Refresh the tracked-addons cache when a new page mounts, so any
+    -- addons that registered after the previous mount are picked up.
+    InvalidateTracked()
+    subscribers[#subscribers + 1] = { frame = frame, refresh = refresh }
+    refresh()      -- paint once immediately so the block isn't blank
+    StartTicker()  -- ensure the sampler is running while someone watches
+end
+
+-- Take a single sample at file-load time so the live graph isn't
+-- empty if the user opens the page in the first second after
+-- /reload. We DO NOT start a continuous ticker here - that's
+-- subscribe-driven now.
+CollectSample()
 
 ---------------------------------------------------------------------------
 -- Public-ish API: reset peak counters (wired into the page's button).
