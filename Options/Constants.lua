@@ -307,15 +307,22 @@ function O.RenderListRows(listContent, rows, opts)
         -- Only emitted when the spec sets either callback - rows
         -- without ordering (User Manual tree, source headers) skip
         -- the arrows entirely so the right edge stays clean.
+        --
+        -- Style: modern atlas-based arrows (NPE_ArrowUp rotated 180 for
+        -- the down arrow). Outline thin, scales cleanly, gold-tinted
+        -- to match the rest of the panel chrome. White on hover, dim
+        -- grey when disabled.
         local rightInset = 4
         if spec.moveUp ~= nil or spec.moveDown ~= nil then
-            local function MakeArrow(textureUp, callback, anchorRight)
+            local function MakeArrow(rotation, callback, anchorRight)
                 local btn = CreateFrame("Button", nil, row)
                 btn:SetSize(14, 14)
                 btn:SetPoint("RIGHT", -anchorRight, 0)
                 local tex = btn:CreateTexture(nil, "OVERLAY")
-                tex:SetAllPoints()
-                tex:SetTexture(textureUp)
+                tex:SetSize(14, 14)
+                tex:SetPoint("CENTER")
+                tex:SetAtlas("NPE_ArrowUp")
+                tex:SetRotation(rotation)
                 if callback then
                     btn:SetScript("OnClick", function() callback() end)
                     btn:SetScript("OnEnter", function() tex:SetVertexColor(1, 1, 1) end)
@@ -327,9 +334,9 @@ function O.RenderListRows(listContent, rows, opts)
                 end
                 return btn
             end
-            -- Down arrow sits flush to the right, up arrow to its left.
-            MakeArrow("Interface\\Buttons\\Arrow-Down-Up", spec.moveDown, 6)
-            MakeArrow("Interface\\Buttons\\Arrow-Up-Up",   spec.moveUp,   24)
+            -- Down arrow flush to the right (rotated 180), up arrow to its left.
+            MakeArrow(math.pi, spec.moveDown, 6)
+            MakeArrow(0,       spec.moveUp,   24)
             rightInset = 44  -- reserve room so label doesn't overlap arrows
         end
 
