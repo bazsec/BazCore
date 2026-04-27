@@ -322,7 +322,15 @@ function O.RenderListRows(listContent, rows, opts)
                 btn:SetSize(22, 22)
                 btn:SetPoint("RIGHT", -anchorRight, 0)
                 local tex = btn:CreateTexture(nil, "ARTWORK")
-                tex:SetAllPoints()
+                tex:SetSize(22, 22)
+                -- Blizzard's WowStyle1ArrowDropdownTemplate XML anchors
+                -- the texture at CENTER y=-2 because the chevron isn't
+                -- pixel-centered in the atlas - it sits slightly low.
+                -- When we rotate 180 for the up arrow, that asymmetry
+                -- flips, so the up texture needs y=+2 to keep its
+                -- chevron in the same visual spot. Without this the
+                -- two buttons in a row look vertically offset.
+                tex:SetPoint("CENTER", 0, (rotation == 0) and -2 or 2)
                 tex:SetAtlas("common-dropdown-a-button")
                 tex:SetRotation(rotation)
                 btn.tex = tex
