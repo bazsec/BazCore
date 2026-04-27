@@ -4,7 +4,7 @@
 
 Shared framework for the Baz Suite of World of Warcraft addons.
 
-BazCore is the foundation library that powers every addon in the Baz Suite. It handles addon registration, saved variables, unified profiles, settings panels, Edit Mode integration, minimap buttons, slash commands, event dispatching, and more - so each addon can focus on its own features without reinventing boilerplate.
+BazCore is the foundation library that powers every addon in the Baz Suite. It handles addon registration, saved variables, unified profiles, the standalone Options window, page builders, rich content blocks, list/detail panels, form widgets, the User Manual system, Edit Mode integration, minimap buttons, slash commands, event dispatching, and dockable widgets - so each addon focuses on its own features instead of reinventing boilerplate.
 
 BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), the standalone widget registry library that powers BazWidgetDrawers' dockable widget system.
 
@@ -15,15 +15,64 @@ BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), 
 ### Addon Framework
 
 *   **RegisterAddon** - one-call registration with title, saved variable, defaults, slash commands, minimap button, and lifecycle callbacks
-*   **Unified profiles** - one profile controls all Baz Suite addons at once, stored in BazCoreDB
+*   **Unified profiles** - per-character profiles wired automatically through RegisterAddon, stored in BazCoreDB
 *   **Profile migration** - automatically migrates old per-addon SavedVariables into the unified system
+*   **QueueForLogin** - register code that runs once at PLAYER_LOGIN, after the addon's saved variables are ready
 
-### Settings Panel
+### Standalone Options Window
 
-*   **Standard page types** - Landing Page, Settings (two-column), List + Detail, Modules, Global Options, and Profiles
-*   **Two-column layout** - toggles and sliders auto-arrange into bordered panels when the window is wide enough
-*   **Half-width buttons** - execute buttons with `width = "half"` render side by side
-*   **Selection persistence** - list/detail panels remember the selected item across refreshes
+*   **Dedicated 1618x883 portrait-framed window** - own home for every Baz addon's settings
+*   **Bottom tab strip** - one tab per registered Baz addon, click to switch
+*   **Left sidebar** - lists the active addon's sub-categories (User Manual, General Settings, custom pages)
+*   **Right content panel** - renders the selected sub-category, scrolls when content overflows
+*   **Spec-background atlas** - dark textured backdrop matching Blizzard's Specialization window
+*   **ESC closes**, draggable, position persists across sessions
+*   **Replaces Blizzard Settings panel integration** for Baz addons - stub canvas in Blizzard's Addon List jumps to the BazCore window
+
+### Page Builders
+
+Standardized generators for common settings pages, all returning option-table structs ready to register via RegisterOptionsTable:
+
+*   **CreateLandingPage** - description + features + slash commands intro page
+*   **CreateModulesPage** - flat list of enable/disable toggles per module/widget
+*   **CreateGlobalOptionsPage** - per-key override toggles that cascade to all widgets
+*   **CreateManagedListPage** - list-detail page for collections of editable items (categories, drawers, bars, profiles). Auto-h1 detail title, intro/introBlocks, Create/Reset buttons, source-based collapsible sections - cohesive with the User Manual chrome
+
+### Rich Content Blocks
+
+For documentation pages and managed-list detail panels:
+
+*   **Headings**: h1, h2, h3, h4
+*   **Text**: paragraph, lead, caption, quote
+*   **Lists**: bulleted or ordered, three levels of nesting
+*   **Layout**: divider, spacer, collapsible (with persistent state per session)
+*   **Media**: image (texture, atlas, fileID, with caption), code (monospace box), table (header + striped rows)
+*   **Callouts**: note (tip / info / warning / danger - colored bg + accent strip + label)
+
+### Form Widgets
+
+*   **toggle** - checkbox with label and optional description
+*   **range** - slider with click-anywhere-to-snap overlay, editable value box for precise entry, opt.set deferred until release (so expensive setters don't fire once-per-step during a drag)
+*   **input** - edit box with Enter to commit, Esc to revert
+*   **select** - dropdown that auto-sizes the button to fit the longest value
+*   **execute** - button, with optional confirm dialog and `width = "half"` for side-by-side layout
+
+### List / Detail Panels
+
+*   **BuildListDetailPanel** - left list of clickable rows + right detail panel
+*   **Gold-gradient selection highlight** matching Blizzard's Traveler's Log + Quest tracker
+*   **Source-based collapsible sections** auto-enabled when any child group has a `source` field
+*   **Hover + select states**, persistent selection across refreshes
+*   **Per-row execute buttons** above the list (e.g., Create New, Reset Defaults)
+*   **Three-button portrait icon** support via CreatePortraitWindow with portraitOnClick / portraitTooltip
+
+### User Manual System
+
+*   **RegisterUserGuide(addonName, guide)** - addon's manual lives next to its settings as a "User Manual" sub-category
+*   **Tree navigation on the left** with collapsible sections, gold-gradient selection
+*   **Rich content panel on the right** rendering all the block types listed above
+*   **Pages support flat `text` field OR rich `blocks` array** + one level of nested `children`
+*   Built-in BazCore manual ships with the framework - any addon can add its own with one call
 
 ### Edit Mode Integration
 
@@ -34,15 +83,15 @@ BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), 
 
 ### Dockable Widget API
 
-*   **RegisterDockableWidget** / **UnregisterDockableWidget** - shims through to LibBazWidget-1.0
-*   **GetDockableWidgets** / **GetDockableWidget** - query the widget registry
+*   **RegisterDockableWidget / UnregisterDockableWidget** - shims through to LibBazWidget-1.0
+*   **GetDockableWidgets / GetDockableWidget** - query the widget registry
 *   **RegisterDockableWidgetCallback** - subscribe to registry changes
 *   **Widget contract** - id, label, frame, designWidth, designHeight, plus optional GetDesiredHeight, GetStatusText, GetOptionsArgs, OnDock, OnUndock
 
 ### Notification Bridge
 
-*   **RegisterNotificationModule** / **PushNotification** - route notifications through BazNotificationCenter when installed
-*   Lazy module registration on first push - no load order worries
+*   **RegisterNotificationModule / PushNotification** - route notifications through BazNotificationCenter when installed
+*   **Lazy module registration** on first push - no load order worries
 
 ### Utilities
 
@@ -54,7 +103,8 @@ BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), 
 *   **ButtonGlow** - spell proc glow overlay system
 *   **Keybinds** - keybind management with SetOverrideBindingClick
 *   **Serialization** - export/import config strings
-*   **Locale** - localization stub
+*   **CreatePortraitWindow** - PortraitFrameFlatTemplate-based window helper with title, drag, ESC close, position persistence, and three-button portrait icon (left/middle/right click handlers)
+*   **CreateItemButton** - ItemButton-styled frame helper for addons that need item-button visuals without the full Blizzard template
 
 ***
 
@@ -62,7 +112,7 @@ BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), 
 
 | Command | Description |
 | --- | --- |
-| `/bazcore` | Open BazCore settings |
+| `/bazcore` | Open the BazCore Options window |
 
 ***
 
@@ -70,7 +120,7 @@ BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), 
 
 *   **WoW Version:** Retail 12.0 (Midnight)
 *   **Zero external dependencies** - BazCore depends on nothing except WoW itself
-*   **Midnight API Safe** - uses taint-safe patterns throughout
+*   **Midnight API safe** - taint-safe patterns throughout
 *   **LibStub** - embedded for LibBazWidget-1.0 version negotiation
 *   **LibBazWidget-1.0** - embedded standalone widget registry library
 
@@ -81,11 +131,11 @@ BazCore also embeds [LibBazWidget-1.0](https://github.com/bazsec/LibBazWidget), 
 BazCore powers the following addons:
 
 *   **[BazBars](https://www.curseforge.com/wow/addons/bazbars)** - Custom extra action bars
+*   **[BazBags](https://www.curseforge.com/wow/addons/bazbags)** - Unified bag panel
 *   **[BazWidgetDrawers](https://www.curseforge.com/wow/addons/bazwidgetdrawers)** - Slide-out widget drawer
 *   **[BazWidgets](https://www.curseforge.com/wow/addons/bazwidgets)** - Widget pack for BazWidgetDrawers
 *   **[BazNotificationCenter](https://www.curseforge.com/wow/addons/baznotificationcenter)** - Toast notification system
 *   **[BazLootNotifier](https://www.curseforge.com/wow/addons/bazlootnotifier)** - Animated loot popups
-*   **[BazDungeonFinder](https://www.curseforge.com/wow/addons/bazdungeonfinder)** - Detached LFG queue bar
 *   **[BazFlightZoom](https://www.curseforge.com/wow/addons/bazflightzoom)** - Auto zoom on flying mounts
 *   **[BazMap](https://www.curseforge.com/wow/addons/bazmap)** - Resizable map and quest log window
 *   **[BazMapPortals](https://www.curseforge.com/wow/addons/bazmapportals)** - Mage portal/teleport map pins
