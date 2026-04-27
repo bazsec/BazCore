@@ -140,15 +140,19 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
         selectedKey = child.name
         container._lastSelectedItem = selectedKey
 
+        -- Toggle the gold-gradient highlight (built in BuildChildRow via
+        -- O.BuildSelectionHighlight) on the matching row, off everywhere
+        -- else. Text colour/alpha mirrors BuildChildRow's defaults so a
+        -- click leaves the row in the same state as the initial render.
         for c, btn in pairs(rowsByChild) do
-            if c == child then
-                btn.bg:SetColorTexture(unpack(O.LIST_SELECTED))
-                btn.text:SetTextColor(unpack(O.GOLD))
+            local isSelected = (c == child)
+            O.ShowHighlightGroup(btn.hlGroup, isSelected)
+            if isSelected then
+                btn.text:SetTextColor(1, 1, 1)
                 btn.text:SetAlpha(1.0)
             else
-                btn.bg:SetColorTexture(0, 0, 0, 0)
                 btn.text:SetTextColor(unpack(O.GOLD))
-                btn.text:SetAlpha(0.7)
+                btn.text:SetAlpha(0.75)
             end
         end
 
