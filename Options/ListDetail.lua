@@ -161,9 +161,12 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
     -- Builds the row spec array O.RenderListRows consumes. Each child
     -- group becomes an "item" row; in source-grouped mode each unique
-    -- source becomes a non-selectable "parent" row preceding its
-    -- items, with an indent so children visually nest under their
-    -- header. Collapsed sources skip emitting their item rows.
+    -- source becomes a "parent" row preceding its items, with an
+    -- indent so children visually nest under their header. Source
+    -- parents are selectable (matches User Manual tree behaviour: a
+    -- click toggles expansion and marks the header as the active row
+    -- with white text). Collapsed sources skip emitting their item
+    -- rows.
     local function BuildRowSpecs()
         local rows = {}
         if hasSourceGrouping then
@@ -178,17 +181,28 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
             end
             for _, src in ipairs(sourceOrder) do
                 local capturedSrc = src
-                local collapsed = container._collapsedSources[capturedSrc] or false
+                local sourceKey   = "__source_" .. capturedSrc
+                local collapsed   = container._collapsedSources[capturedSrc] or false
+                -- Source headers are selectable like User Manual tree
+                -- parents: a click toggles expansion AND turns the
+                -- header text white, matching the User Manual look.
+                -- Selection just lives on the row visual; the detail
+                -- panel only updates on child clicks (source headers
+                -- don't have their own page content), so the previous
+                -- child's content stays put until the user picks a
+                -- different child.
                 rows[#rows + 1] = {
-                    key        = "__source_" .. capturedSrc,
+                    key        = sourceKey,
                     label      = capturedSrc,
                     count      = #bySource[capturedSrc],
                     isParent   = true,
                     expanded   = not collapsed,
-                    isSelected = false,  -- section headers aren't selectable
+                    isSelected = (sourceKey == selectedKey),
                     onClick    = function()
                         container._collapsedSources[capturedSrc] =
                             not container._collapsedSources[capturedSrc]
+                        selectedKey = sourceKey
+                        container._lastSelectedItem = selectedKey
                         RenderList()
                     end,
                 }
