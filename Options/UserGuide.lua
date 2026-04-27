@@ -192,17 +192,33 @@ local function RebuildTree(listContent, addonName, guide, listW, onSelect)
 
     local y = 0
     for _, node in ipairs(nodes) do
+        local isParent   = node.hasChildren
+        local rowH       = isParent and O.SECTION_HEADER_HEIGHT or TREE_ROW_H
+
         local row = CreateFrame("Button", nil, listContent)
-        row:SetSize(rowWidth, TREE_ROW_H)
+        row:SetSize(rowWidth, rowH)
         row:SetPoint("TOPLEFT", 0, -y)
         row:RegisterForClicks("LeftButtonUp")
 
         local isSelected = (node.key == state.selectedKey)
 
+        -- Parent rows (pages with sub-pages) get the chapter-divider
+        -- chrome from the shared helper so they read as section
+        -- headings - same treatment as the source-grouped sections in
+        -- BuildListDetailPanel. Leaf rows stay plain.
+        if isParent then
+            O.BuildSectionHeaderChrome(row)
+        end
+
         -- Subtle hover background (only when not selected)
-        local hover = row:CreateTexture(nil, "BACKGROUND")
+        local hover = row:CreateTexture(nil, "BACKGROUND", nil, 1)
         hover:SetAllPoints()
-        hover:SetColorTexture(1, 1, 1, 0.05)
+        if isParent then
+            -- Gold-tinted hover to match the chapter-divider chrome.
+            hover:SetColorTexture(1, 0.82, 0, 0.10)
+        else
+            hover:SetColorTexture(1, 1, 1, 0.05)
+        end
         hover:Hide()
         row.hover = hover
 
@@ -214,7 +230,7 @@ local function RebuildTree(listContent, addonName, guide, listW, onSelect)
         local indent = 8 + node.depth * 16
 
         local arrow
-        if node.hasChildren then
+        if isParent then
             -- Classic Blizzard plus/minus button textures
             arrow = row:CreateTexture(nil, "OVERLAY")
             arrow:SetSize(14, 14)
@@ -231,7 +247,11 @@ local function RebuildTree(listContent, addonName, guide, listW, onSelect)
         text:SetPoint("LEFT", indent, 0)
         text:SetPoint("RIGHT", -4, 0)
         text:SetJustifyH("LEFT")
-        text:SetText(node.page.title or "")
+        -- Parent rows uppercase the title to match the Settings section
+        -- headers - reads as a heading at a glance even at the same font.
+        local title = node.page.title or ""
+        if isParent then title = title:upper() end
+        text:SetText(title)
         if isSelected then
             text:SetTextColor(1, 1, 1)         -- white when selected
             text:SetAlpha(1.0)
@@ -267,7 +287,7 @@ local function RebuildTree(listContent, addonName, guide, listW, onSelect)
             end
         end)
 
-        y = y + TREE_ROW_H
+        y = y + rowH
     end
 
     listContent:SetHeight(math.max(y, 1))

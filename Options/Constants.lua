@@ -158,6 +158,46 @@ function O.ShowHighlightGroup(group, show)
 end
 
 ---------------------------------------------------------------------------
+-- Section header chrome - the chapter-divider look used by source-
+-- grouped lists in BuildListDetailPanel AND by expandable parent
+-- rows in the User Manual tree. Keeping the styling here so both
+-- renderers stay in lockstep when the look changes.
+--
+-- Adds three textures to a header button frame:
+--   * Warm-toned dark backdrop fill (BACKGROUND layer)
+--   * Thick gold accent bar on the left edge (ARTWORK layer)
+--   * Thin gold rule along the bottom, full width (ARTWORK layer)
+--
+-- The gold rule is anchored at x=0 (no inset on either side) so it
+-- meets the accent bar at the bottom-left corner cleanly and reaches
+-- the right edge of the backdrop without leaving a gap.
+---------------------------------------------------------------------------
+
+function O.BuildSectionHeaderChrome(button)
+    local bg = button:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.12, 0.09, 0.04, 0.65)
+
+    local accent = button:CreateTexture(nil, "ARTWORK")
+    accent:SetWidth(3)
+    accent:SetPoint("TOPLEFT", 0, 0)
+    accent:SetPoint("BOTTOMLEFT", 0, 0)
+    accent:SetColorTexture(1.00, 0.82, 0.00, 0.95)
+
+    local rule = button:CreateTexture(nil, "ARTWORK")
+    rule:SetHeight(1)
+    rule:SetPoint("BOTTOMLEFT", 0, 0)
+    rule:SetPoint("BOTTOMRIGHT", 0, 0)
+    rule:SetColorTexture(1.00, 0.82, 0.00, 0.55)
+
+    return { bg = bg, accent = accent, rule = rule }
+end
+
+-- Section-header height is slightly taller than item rows so the
+-- chapter-divider backdrop has room to breathe.
+O.SECTION_HEADER_HEIGHT = (O.LIST_ITEM_HEIGHT or 28) + 4
+
+---------------------------------------------------------------------------
 -- List/detail layout dimensions - shared so the User Manual tree and
 -- the standard list/detail panel resolve to the same widths regardless
 -- of the container size. ListDetail used to clamp at 22 % / 180-320 px;

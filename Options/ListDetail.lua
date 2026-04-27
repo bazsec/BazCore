@@ -223,46 +223,16 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
     local RenderList  -- forward declaration so the section-header click can call it
 
-    -- Section headers are slightly taller than item rows so the
-    -- chapter-title backdrop has room to breathe.
-    local SECTION_HEADER_H = O.LIST_ITEM_HEIGHT + 4
-
-    -- Builds a clickable section header. Visually distinct from the
-    -- item rows below it so the user reads it as a chapter divider:
-    --   * darker warm-toned backdrop fill across the row
-    --   * thicker gold accent bar on the left edge
-    --   * thin gold rule along the bottom (chapter-title style)
-    --   * slightly taller than item rows
-    --   * uppercased label so it reads as a heading even at the same font
-    -- Uses the same plus/minus toggle textures the User Manual tree
-    -- uses, so the two collapsible-list patterns feel consistent.
+    -- Builds a clickable section header. Visual chrome (backdrop +
+    -- accent bar + bottom rule) comes from the shared
+    -- O.BuildSectionHeaderChrome helper so the User Manual tree and
+    -- list/detail panels stay in lockstep.
     local function BuildSectionHeader(source, count, listY)
         local headerBtn = CreateFrame("Button", nil, listContent)
-        headerBtn:SetSize(listW - 26, SECTION_HEADER_H)
+        headerBtn:SetSize(listW - 26, O.SECTION_HEADER_HEIGHT)
         headerBtn:SetPoint("TOPLEFT", 0, -listY)
 
-        -- Warm-toned dark fill so the header reads as a separate band.
-        local bg = headerBtn:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        bg:SetColorTexture(0.12, 0.09, 0.04, 0.65)
-
-        -- Left-edge gold accent bar (thicker than the bottom rule so
-        -- the eye picks up the heading immediately when scanning).
-        local accent = headerBtn:CreateTexture(nil, "ARTWORK")
-        accent:SetWidth(3)
-        accent:SetPoint("TOPLEFT", 0, 0)
-        accent:SetPoint("BOTTOMLEFT", 0, 0)
-        accent:SetColorTexture(1.00, 0.82, 0.00, 0.95)
-
-        -- Thin gold rule along the bottom - chapter-title underline.
-        -- Spans the full width, flush with both the left accent bar
-        -- (clean L-corner, no gap) and the right edge of the dark
-        -- backdrop (no premature termination).
-        local rule = headerBtn:CreateTexture(nil, "ARTWORK")
-        rule:SetHeight(1)
-        rule:SetPoint("BOTTOMLEFT", 0, 0)
-        rule:SetPoint("BOTTOMRIGHT", 0, 0)
-        rule:SetColorTexture(1.00, 0.82, 0.00, 0.55)
+        O.BuildSectionHeaderChrome(headerBtn)
 
         local hover = headerBtn:CreateTexture(nil, "BACKGROUND", nil, 1)
         hover:SetAllPoints()
@@ -313,7 +283,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
             for _, src in ipairs(sourceOrder) do
                 BuildSectionHeader(src, #bySource[src], listY)
-                listY = listY + SECTION_HEADER_H
+                listY = listY + O.SECTION_HEADER_HEIGHT
                 if not container._collapsedSources[src] then
                     for _, child in ipairs(bySource[src]) do
                         BuildChildRow(child, listY, 26)  -- nested under header
