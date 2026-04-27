@@ -94,10 +94,14 @@ local function BuildSpellIconCache()
     end)
 end
 
--- Start the cache build at login so it's ready before the picker is opened
-EventUtil.ContinueOnAddOnLoaded("BazCore", function()
-    C_Timer.After(2, BuildSpellIconCache)
-end)
+-- The cache is built LAZILY on first ShowIconPicker call - not at
+-- login. Eager-building cost ~80 MB transient + ~14 MB retained per
+-- session, even when the user never opens the icon picker (most
+-- sessions). The picker opens fine without the spell name -> icon
+-- map; search-by-spell-name just won't return results until the
+-- coroutine has chewed through the spell ID space, which takes a
+-- few seconds in the background and yields between iterations so
+-- it never blocks the frame.
 
 local function LoadIcons()
     if #allIcons > 0 then return end
@@ -416,6 +420,11 @@ end
 
 function BazCore:ShowIconPicker(callback, selectedIcon)
     LoadIcons()
+    -- Kick off the spell name -> icon cache on first open. Idempotent;
+    -- a `cacheReady` flag short-circuits subsequent calls. Yields per
+    -- iteration so the picker is usable immediately even while the
+    -- coroutine is still running in the background.
+    BuildSpellIconCache()
 
     local f = BuildPicker()
     currentCallback = callback
