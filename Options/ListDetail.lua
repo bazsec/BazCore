@@ -135,29 +135,11 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
         end
     end
 
-    local function SelectGroup(child)
-        if not child then return end
-        selectedKey = child.name
-        container._lastSelectedItem = selectedKey
+    local RenderList  -- forward declared so SelectGroup can rebuild
 
-        -- Toggle the gold-gradient highlight (built in BuildChildRow via
-        -- O.BuildSelectionHighlight) on the matching row, off everywhere
-        -- else. Text colour/alpha mirrors BuildChildRow's defaults so a
-        -- click leaves the row in the same state as the initial render.
-        for c, btn in pairs(rowsByChild) do
-            local isSelected = (c == child)
-            O.ShowHighlightGroup(btn.hlGroup, isSelected)
-            if isSelected then
-                btn.text:SetTextColor(1, 1, 1)
-                btn.text:SetAlpha(1.0)
-            else
-                btn.text:SetTextColor(unpack(O.GOLD))
-                btn.text:SetAlpha(0.75)
-            end
-        end
-
+    local function RenderDetailFor(child)
         O.ClearChildren(detailContent)
-        if child.args then
+        if child and child.args then
             local dw = detailContent:GetWidth() - O.PAD
             if dw <= 0 then dw = 360 end
             local bottomY = O.RenderWidgets(detailContent, child.args, dw)
@@ -165,112 +147,26 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
         end
     end
 
-    -- Builds one clickable child row. xIndent shifts the text right so
-    -- grouped children read as visually nested under their header.
-    -- Selection chrome is the same Blizzard-style gold-gradient band
-    -- the User Manual tree uses (via O.BuildSelectionHighlight) so
-    -- both layouts read as cohesive across the suite.
-    local function BuildChildRow(child, listY, xIndent)
-        local itemBtn = CreateFrame("Button", nil, listContent)
-        itemBtn:SetSize(listW - 26, O.LIST_ITEM_HEIGHT)
-        itemBtn:SetPoint("TOPLEFT", 0, -listY)
-
-        -- Subtle hover background for non-selected rows. Selection
-        -- itself uses the gradient highlight; the bg texture stays
-        -- as a fallback / hover surface only.
-        local hover = itemBtn:CreateTexture(nil, "BACKGROUND")
-        hover:SetAllPoints()
-        hover:SetColorTexture(1, 1, 1, 0.05)
-        hover:Hide()
-        itemBtn.hover = hover
-
-        local hlGroup = O.BuildSelectionHighlight(itemBtn, O.LIST_ITEM_HEIGHT)
-        O.ShowHighlightGroup(hlGroup, child.name == selectedKey)
-        itemBtn.hlGroup = hlGroup
-
-        local text = itemBtn:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
-        text:SetPoint("LEFT", xIndent or 8, 0)
-        text:SetPoint("RIGHT", -4, 0)
-        text:SetJustifyH("LEFT")
-        text:SetText(child.name or "?")
-        if child.name == selectedKey then
-            text:SetTextColor(1, 1, 1)         -- white when selected
-            text:SetAlpha(1.0)
-        else
-            text:SetTextColor(unpack(O.GOLD))  -- gold otherwise
-            text:SetAlpha(0.75)
-        end
-        itemBtn.text = text
-
-        itemBtn:SetScript("OnClick", function() SelectGroup(child) end)
-        itemBtn:SetScript("OnEnter", function(self)
-            if child.name ~= selectedKey then
-                self.hover:Show()
-                self.text:SetAlpha(1.0)
-            end
-        end)
-        itemBtn:SetScript("OnLeave", function(self)
-            if child.name ~= selectedKey then
-                self.hover:Hide()
-                self.text:SetAlpha(0.75)
-            end
-        end)
-
-        listButtons[#listButtons + 1] = itemBtn
-        rowsByChild[child] = itemBtn
-        return itemBtn
+    -- Picking an item updates the selection state and re-renders both
+    -- panels. The list rebuild flows the new isSelected flag through
+    -- the shared row builder so the gold-gradient highlight follows
+    -- the click without needing a separate per-row update path.
+    local function SelectGroup(child)
+        if not child then return end
+        selectedKey = child.name
+        container._lastSelectedItem = selectedKey
+        RenderList()
+        RenderDetailFor(child)
     end
 
-    local RenderList  -- forward declaration so the section-header click can call it
-
-    -- Builds a clickable section header. Visual chrome (backdrop +
-    -- accent bar + bottom rule) comes from the shared
-    -- O.BuildSectionHeaderChrome helper so the User Manual tree and
-    -- list/detail panels stay in lockstep.
-    local function BuildSectionHeader(source, count, listY)
-        local headerBtn = CreateFrame("Button", nil, listContent)
-        headerBtn:SetSize(listW - 26, O.SECTION_HEADER_HEIGHT)
-        headerBtn:SetPoint("TOPLEFT", 0, -listY)
-
-        O.BuildSectionHeaderChrome(headerBtn)
-
-        local hover = headerBtn:CreateTexture(nil, "BACKGROUND", nil, 1)
-        hover:SetAllPoints()
-        hover:SetColorTexture(1, 0.82, 0, 0.10)
-        hover:Hide()
-
-        local collapsed = container._collapsedSources[source] or false
-        local arrow = headerBtn:CreateTexture(nil, "OVERLAY")
-        arrow:SetSize(14, 14)
-        arrow:SetPoint("LEFT", 8, 0)
-        arrow:SetTexture(collapsed
-            and "Interface\\Buttons\\UI-PlusButton-Up"
-            or  "Interface\\Buttons\\UI-MinusButton-Up")
-
-        local label = headerBtn:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
-        label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
-        label:SetText(source .. "  |cff888888(" .. count .. ")|r")
-        label:SetTextColor(unpack(O.GOLD))
-
-        headerBtn:SetScript("OnEnter", function() hover:Show() end)
-        headerBtn:SetScript("OnLeave", function() hover:Hide() end)
-        headerBtn:SetScript("OnClick", function()
-            container._collapsedSources[source] = not container._collapsedSources[source]
-            RenderList()
-        end)
-        return headerBtn
-    end
-
-    RenderList = function()
-        O.ClearChildren(listContent)
-        listButtons = {}
-        rowsByChild = {}
-
-        local listY = 0
-
+    -- Builds the row spec array O.RenderListRows consumes. Each child
+    -- group becomes an "item" row; in source-grouped mode each unique
+    -- source becomes a non-selectable "parent" row preceding its
+    -- items, with an indent so children visually nest under their
+    -- header. Collapsed sources skip emitting their item rows.
+    local function BuildRowSpecs()
+        local rows = {}
         if hasSourceGrouping then
-            -- Bucket children by source, preserving each source's first
-            -- appearance order so the same input produces a stable list.
             local bySource, sourceOrder = {}, {}
             for _, child in ipairs(childGroups) do
                 local src = child.source or "Other"
@@ -280,14 +176,33 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
                 end
                 table.insert(bySource[src], child)
             end
-
             for _, src in ipairs(sourceOrder) do
-                BuildSectionHeader(src, #bySource[src], listY)
-                listY = listY + O.SECTION_HEADER_HEIGHT
-                if not container._collapsedSources[src] then
-                    for _, child in ipairs(bySource[src]) do
-                        BuildChildRow(child, listY, 26)  -- nested under header
-                        listY = listY + O.LIST_ITEM_HEIGHT
+                local capturedSrc = src
+                local collapsed = container._collapsedSources[capturedSrc] or false
+                rows[#rows + 1] = {
+                    key        = "__source_" .. capturedSrc,
+                    label      = capturedSrc,
+                    count      = #bySource[capturedSrc],
+                    isParent   = true,
+                    expanded   = not collapsed,
+                    isSelected = false,  -- section headers aren't selectable
+                    onClick    = function()
+                        container._collapsedSources[capturedSrc] =
+                            not container._collapsedSources[capturedSrc]
+                        RenderList()
+                    end,
+                }
+                if not collapsed then
+                    for _, child in ipairs(bySource[capturedSrc]) do
+                        local capturedChild = child
+                        rows[#rows + 1] = {
+                            key        = capturedChild.name,
+                            label      = capturedChild.name or "?",
+                            isParent   = false,
+                            isSelected = (capturedChild.name == selectedKey),
+                            indent     = 18,  -- nested under section header
+                            onClick    = function() SelectGroup(capturedChild) end,
+                        }
                     end
                 end
             end
@@ -295,12 +210,24 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
             -- Flat list (legacy behaviour for pages without source-tagged
             -- children, e.g. Drawers).
             for _, child in ipairs(childGroups) do
-                BuildChildRow(child, listY, 8)
-                listY = listY + O.LIST_ITEM_HEIGHT
+                local capturedChild = child
+                rows[#rows + 1] = {
+                    key        = capturedChild.name,
+                    label      = capturedChild.name or "?",
+                    isParent   = false,
+                    isSelected = (capturedChild.name == selectedKey),
+                    onClick    = function() SelectGroup(capturedChild) end,
+                }
             end
         end
+        return rows
+    end
 
-        listContent:SetHeight(math.max(listY, 1))
+    RenderList = function()
+        O.ClearChildren(listContent)
+        local rows = BuildRowSpecs()
+        local _, totalH = O.RenderListRows(listContent, rows, { width = listW - 26 })
+        listContent:SetHeight(math.max(totalH or 0, 1))
     end
 
     RenderList()

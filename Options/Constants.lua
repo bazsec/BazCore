@@ -198,6 +198,141 @@ end
 O.SECTION_HEADER_HEIGHT = (O.LIST_ITEM_HEIGHT or 28) + 4
 
 ---------------------------------------------------------------------------
+-- O.RenderListRows — one shared row builder for every list/sidebar in
+-- the suite. Pages converted their domain-specific data (tree nodes,
+-- option-table groups, top-level sub-categories) into a flat array of
+-- row specs and hand it off here, which means visuals + behaviour stay
+-- in lockstep across:
+--   * The standalone window's left sidebar (Registration.lua)
+--   * The User Manual tree (UserGuide.lua)
+--   * The list/detail panel (ListDetail.lua)
+--
+-- Each row spec is a table:
+--   {
+--     key        = unique string,
+--     label      = display text,
+--     count      = optional number (rendered as "  (N)" suffix in grey),
+--     isParent   = true for chapter-divider headers (BG + accent +
+--                  bottom rule + +/- chevron). Default false.
+--     expanded   = parent rows: true shows minus, false shows plus.
+--                  Ignored for non-parent rows.
+--     isSelected = true to draw the gold-gradient highlight + white
+--                  text. Parent rows skip the gradient (chapter chrome
+--                  is enough) but still get the white text colour.
+--     depth      = optional indentation level (0 = flush left).
+--     indent     = optional extra pixels of indent on top of depth.
+--     onClick    = function() called on left-click.
+--   }
+--
+-- opts:
+--   width          = list-content width in pixels (required).
+--   selectableHeader = false to skip selection styling on parent rows
+--                    (Settings sections aren't selectable; User Manual
+--                    parents are). Default true.
+---------------------------------------------------------------------------
+
+function O.RenderListRows(listContent, rows, opts)
+    opts = opts or {}
+    local width = opts.width
+    if not width then return end
+
+    local frames = {}
+    local y = 0
+
+    for i, spec in ipairs(rows) do
+        local isParent   = spec.isParent and true or false
+        local rowH       = isParent and O.SECTION_HEADER_HEIGHT or O.LIST_ITEM_HEIGHT
+        local isSelected = spec.isSelected and true or false
+
+        local row = CreateFrame("Button", nil, listContent)
+        row:SetSize(width, rowH)
+        row:SetPoint("TOPLEFT", 0, -y)
+        row:RegisterForClicks("LeftButtonUp")
+
+        if isParent then
+            O.BuildSectionHeaderChrome(row)
+        end
+
+        -- Subtle hover background (only when not selected).
+        local hover = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+        hover:SetAllPoints()
+        if isParent then
+            hover:SetColorTexture(1, 0.82, 0, 0.10)
+        else
+            hover:SetColorTexture(1, 1, 1, 0.05)
+        end
+        hover:Hide()
+        row.hover = hover
+
+        -- Gold-gradient selection highlight. Skipped on parent rows
+        -- because the chapter chrome already gives them their visual
+        -- identity; layering the gradient + top/bottom rules would
+        -- double-paint the accent + bottom rule.
+        local hlGroup
+        if not isParent then
+            hlGroup = O.BuildSelectionHighlight(row, rowH)
+            O.ShowHighlightGroup(hlGroup, isSelected)
+        end
+        row.hlGroup = hlGroup
+
+        local depth   = spec.depth or 0
+        local indent  = 8 + depth * 16 + (spec.indent or 0)
+
+        -- Plus/minus chevron for parent rows. Positioned a hair left
+        -- of the text so it doesn't visually float away from the row.
+        if isParent then
+            local arrow = row:CreateTexture(nil, "OVERLAY")
+            arrow:SetSize(14, 14)
+            arrow:SetPoint("LEFT", indent - 2, 0)
+            arrow:SetTexture(spec.expanded
+                and "Interface\\Buttons\\UI-MinusButton-Up"
+                or  "Interface\\Buttons\\UI-PlusButton-Up")
+            indent = indent + 16
+        end
+
+        local labelText = spec.label or ""
+        if spec.count then
+            labelText = labelText .. "  |cff888888(" .. spec.count .. ")|r"
+        end
+        local text = row:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
+        text:SetPoint("LEFT", indent, 0)
+        text:SetPoint("RIGHT", -4, 0)
+        text:SetJustifyH("LEFT")
+        text:SetText(labelText)
+        if isSelected then
+            text:SetTextColor(1, 1, 1)
+            text:SetAlpha(1.0)
+        else
+            text:SetTextColor(unpack(O.GOLD))
+            text:SetAlpha(0.75)
+        end
+        row.text = text
+
+        local capturedClick = spec.onClick
+        row:SetScript("OnClick", function()
+            if capturedClick then capturedClick() end
+        end)
+        row:SetScript("OnEnter", function(self)
+            if not isSelected then
+                self.hover:Show()
+                self.text:SetAlpha(1.0)
+            end
+        end)
+        row:SetScript("OnLeave", function(self)
+            if not isSelected then
+                self.hover:Hide()
+                self.text:SetAlpha(0.75)
+            end
+        end)
+
+        frames[i] = row
+        y = y + rowH
+    end
+
+    return frames, y
+end
+
+---------------------------------------------------------------------------
 -- List/detail layout dimensions - shared so the User Manual tree and
 -- the standard list/detail panel resolve to the same widths regardless
 -- of the container size. ListDetail used to clamp at 22 % / 180-320 px;

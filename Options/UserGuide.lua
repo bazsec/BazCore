@@ -183,119 +183,31 @@ local function RebuildTree(listContent, addonName, guide, listW, onSelect)
     local nodes = FlattenVisibleNodes(guide.pages, state.expanded, 0)
 
     local rowWidth = listW - 26
-    -- BuildSelectionHighlight + ShowHighlightGroup live in
-    -- Options/Constants.lua so both the User Manual tree and the
-    -- list/detail panel render the same Blizzard-style gold-gradient
-    -- selection band.
-    local BuildSelectionHighlight = O.BuildSelectionHighlight
-    local ShowGroup = O.ShowHighlightGroup
-
-    local y = 0
+    local rows = {}
     for _, node in ipairs(nodes) do
-        local isParent   = node.hasChildren
-        local rowH       = isParent and O.SECTION_HEADER_HEIGHT or TREE_ROW_H
-
-        local row = CreateFrame("Button", nil, listContent)
-        row:SetSize(rowWidth, rowH)
-        row:SetPoint("TOPLEFT", 0, -y)
-        row:RegisterForClicks("LeftButtonUp")
-
-        local isSelected = (node.key == state.selectedKey)
-
-        -- Parent rows (pages with sub-pages) get the chapter-divider
-        -- chrome from the shared helper so they read as section
-        -- headings - same treatment as the source-grouped sections in
-        -- BuildListDetailPanel. Leaf rows stay plain.
-        if isParent then
-            O.BuildSectionHeaderChrome(row)
-        end
-
-        -- Subtle hover background (only when not selected)
-        local hover = row:CreateTexture(nil, "BACKGROUND", nil, 1)
-        hover:SetAllPoints()
-        if isParent then
-            -- Gold-tinted hover to match the chapter-divider chrome.
-            hover:SetColorTexture(1, 0.82, 0, 0.10)
-        else
-            hover:SetColorTexture(1, 1, 1, 0.05)
-        end
-        hover:Hide()
-        row.hover = hover
-
-        -- Gold-gradient selection highlight (Blizzard-style). Skipped
-        -- on parent rows because the chapter-divider chrome already
-        -- gives them their own visual identity; layering the gradient
-        -- bands + top/bottom rules on top would double-paint the
-        -- accent bar and the bottom rule, leaving an extra gold strip
-        -- across the top of the row. Selection on parents reads via
-        -- the text colour (white when selected, gold otherwise).
-        local hlGroup
-        if not isParent then
-            hlGroup = BuildSelectionHighlight(row)
-            ShowGroup(hlGroup, isSelected)
-        end
-        row.hlGroup = hlGroup
-
-        local indent = 8 + node.depth * 16
-
-        local arrow
-        if isParent then
-            -- Classic Blizzard plus/minus button textures
-            arrow = row:CreateTexture(nil, "OVERLAY")
-            arrow:SetSize(14, 14)
-            arrow:SetPoint("LEFT", indent - 2, 0)
-            if state.expanded[node.key] then
-                arrow:SetTexture("Interface\\Buttons\\UI-MinusButton-Up")
-            else
-                arrow:SetTexture("Interface\\Buttons\\UI-PlusButton-Up")
-            end
-            indent = indent + 16
-        end
-
-        local text = row:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
-        text:SetPoint("LEFT", indent, 0)
-        text:SetPoint("RIGHT", -4, 0)
-        text:SetJustifyH("LEFT")
-        text:SetText(node.page.title or "")
-        if isSelected then
-            text:SetTextColor(1, 1, 1)         -- white when selected
-            text:SetAlpha(1.0)
-        else
-            text:SetTextColor(unpack(O.GOLD))  -- gold otherwise
-            text:SetAlpha(0.75)
-        end
-        row.text = text
-
-        local capturedKey = node.key
-        local capturedHasChildren = node.hasChildren
+        local capturedKey  = node.key
+        local hasChildren  = node.hasChildren and true or false
         local capturedPage = node.page
-
-        row:SetScript("OnClick", function()
-            if capturedHasChildren then
-                state.expanded[capturedKey] = not state.expanded[capturedKey]
-            end
-            state.selectedKey = capturedKey
-            onSelect(capturedPage)
-            RebuildTree(listContent, addonName, guide, listW, onSelect)
-        end)
-
-        row:SetScript("OnEnter", function(self)
-            if capturedKey ~= state.selectedKey then
-                self.hover:Show()
-                self.text:SetAlpha(1.0)
-            end
-        end)
-        row:SetScript("OnLeave", function(self)
-            if capturedKey ~= state.selectedKey then
-                self.hover:Hide()
-                self.text:SetAlpha(0.75)
-            end
-        end)
-
-        y = y + rowH
+        rows[#rows + 1] = {
+            key        = capturedKey,
+            label      = capturedPage.title or "",
+            isParent   = hasChildren,
+            expanded   = state.expanded[capturedKey] and true or false,
+            isSelected = (capturedKey == state.selectedKey),
+            depth      = node.depth,
+            onClick    = function()
+                if hasChildren then
+                    state.expanded[capturedKey] = not state.expanded[capturedKey]
+                end
+                state.selectedKey = capturedKey
+                onSelect(capturedPage)
+                RebuildTree(listContent, addonName, guide, listW, onSelect)
+            end,
+        }
     end
 
-    listContent:SetHeight(math.max(y, 1))
+    local _, totalH = O.RenderListRows(listContent, rows, { width = rowWidth })
+    listContent:SetHeight(math.max(totalH or 0, 1))
 end
 
 ---------------------------------------------------------------------------
