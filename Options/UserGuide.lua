@@ -222,9 +222,18 @@ local function RebuildTree(listContent, addonName, guide, listW, onSelect)
         hover:Hide()
         row.hover = hover
 
-        -- Gold-gradient selection highlight (Blizzard-style)
-        local hlGroup = BuildSelectionHighlight(row)
-        ShowGroup(hlGroup, isSelected)
+        -- Gold-gradient selection highlight (Blizzard-style). Skipped
+        -- on parent rows because the chapter-divider chrome already
+        -- gives them their own visual identity; layering the gradient
+        -- bands + top/bottom rules on top would double-paint the
+        -- accent bar and the bottom rule, leaving an extra gold strip
+        -- across the top of the row. Selection on parents reads via
+        -- the text colour (white when selected, gold otherwise).
+        local hlGroup
+        if not isParent then
+            hlGroup = BuildSelectionHighlight(row)
+            ShowGroup(hlGroup, isSelected)
+        end
         row.hlGroup = hlGroup
 
         local indent = 8 + node.depth * 16
@@ -247,11 +256,7 @@ local function RebuildTree(listContent, addonName, guide, listW, onSelect)
         text:SetPoint("LEFT", indent, 0)
         text:SetPoint("RIGHT", -4, 0)
         text:SetJustifyH("LEFT")
-        -- Parent rows uppercase the title to match the Settings section
-        -- headers - reads as a heading at a glance even at the same font.
-        local title = node.page.title or ""
-        if isParent then title = title:upper() end
-        text:SetText(title)
+        text:SetText(node.page.title or "")
         if isSelected then
             text:SetTextColor(1, 1, 1)         -- white when selected
             text:SetAlpha(1.0)

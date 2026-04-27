@@ -249,7 +249,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
         local label = headerBtn:CreateFontString(nil, "OVERLAY", O.LIST_FONT)
         label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
-        label:SetText(source:upper() .. "  |cff888888(" .. count .. ")|r")
+        label:SetText(source .. "  |cff888888(" .. count .. ")|r")
         label:SetTextColor(unpack(O.GOLD))
 
         headerBtn:SetScript("OnEnter", function() hover:Show() end)
