@@ -225,10 +225,14 @@ O.SECTION_HEADER_HEIGHT = (O.LIST_ITEM_HEIGHT or 28) + 4
 --   }
 --
 -- opts:
---   width          = list-content width in pixels (required).
---   selectableHeader = false to skip selection styling on parent rows
---                    (Settings sections aren't selectable; User Manual
---                    parents are). Default true.
+--   width = list-content width in pixels (required).
+--
+-- Selection styling for parent rows is intentionally NOT optional.
+-- Both lists feed the same renderer the same shape of data; if a
+-- caller wants the parent to look "selected" it sets isSelected on
+-- that row spec. Source headers in the list/detail panel use this
+-- the same way User Manual tree parents do, so the two lists always
+-- read as one cohesive widget.
 ---------------------------------------------------------------------------
 
 function O.RenderListRows(listContent, rows, opts)
