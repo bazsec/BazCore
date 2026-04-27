@@ -389,42 +389,60 @@ function BazCore:CreateManagedListPage(addonName, config)
         -- each sub-group as a list row (clicking selects it), and
         -- renders the selected sub-group's args in the detail pane via
         -- O.RenderWidgets.
+        --
+        -- Detail-arg construction (the buildDetail call + block
+        -- enumeration) is DEFERRED into a closure stored on each
+        -- item's `_lazyDetailBuild`. BuildListDetailPanel evaluates
+        -- this on first selection - so a page with N items only ever
+        -- builds N=1's worth of detail tables initially, instead of
+        -- doing N x buildDetail upfront on every render. That used to
+        -- be one of BazCore's biggest transient allocators on first
+        -- page open (multiple MB of intermediate Lua tables /
+        -- closures captured by buildDetail bodies).
         local items = (config.getItems and config.getItems()) or {}
         local itemArgs = {}
         for i, item in ipairs(items) do
             local itemName = item.name or item.label or tostring(item.key or i)
-            local detailArgs = {}
-            local idx = 0
+            local capturedItem = item
+            local capturedName = itemName
 
-            -- Auto-h1 page title - matches the User Manual's
-            -- RenderPageContent which prepends `{ type="h1", text=page.title }`
-            -- to every page's blocks.
-            if detailTitleType then
-                idx = idx + 1
-                detailArgs["b_" .. idx] = {
-                    order = idx,
-                    type  = detailTitleType,
-                    text  = itemName,
-                }
-            end
+            local function BuildDetailArgs()
+                local detailArgs = {}
+                local idx = 0
 
-            -- buildDetail provides the per-item content blocks. Order
-            -- is overwritten by array position so caller-supplied
-            -- orders never collide with the auto-h1.
-            local userBlocks = (config.buildDetail and config.buildDetail(item)) or {}
-            for _, block in ipairs(userBlocks) do
-                idx = idx + 1
-                block.order = idx
-                detailArgs["b_" .. idx] = block
+                -- Auto-h1 page title - matches the User Manual's
+                -- RenderPageContent which prepends
+                -- `{ type="h1", text=page.title }` to every page's blocks.
+                if detailTitleType then
+                    idx = idx + 1
+                    detailArgs["b_" .. idx] = {
+                        order = idx,
+                        type  = detailTitleType,
+                        text  = capturedName,
+                    }
+                end
+
+                -- buildDetail provides the per-item content blocks.
+                -- Order is overwritten by array position so
+                -- caller-supplied orders never collide with the auto-h1.
+                local userBlocks = (config.buildDetail and config.buildDetail(capturedItem)) or {}
+                for _, block in ipairs(userBlocks) do
+                    idx = idx + 1
+                    block.order = idx
+                    detailArgs["b_" .. idx] = block
+                end
+
+                return detailArgs
             end
 
             local itemKey = tostring(item.key or i)
             itemArgs["item_" .. itemKey] = {
-                order  = item.order or (i * 10),
-                type   = "group",
-                name   = itemName,
-                source = item.source,
-                args   = detailArgs,
+                order            = item.order or (i * 10),
+                type             = "group",
+                name             = itemName,
+                source           = item.source,
+                args             = nil,                -- lazy - filled on first selection
+                _lazyDetailBuild = BuildDetailArgs,
                 -- Stash the original item so the row's move handlers
                 -- can hand it back to config.onMoveUp/onMoveDown - the
                 -- inner group is what BuildListDetailPanel sees, not

@@ -139,7 +139,18 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
 
     local function RenderDetailFor(child)
         O.ClearChildren(detailContent)
-        if child and child.args then
+        if not child then return end
+        -- Lazy detail: pages produced by CreateManagedListPage stash a
+        -- `_lazyDetailBuild` closure instead of pre-building the args
+        -- table for every item upfront. We evaluate it on first
+        -- selection here, then cache the result on the child so
+        -- subsequent re-renders (e.g. window resize, RefreshOptions)
+        -- don't repeat the work.
+        if not child.args and child._lazyDetailBuild then
+            child.args = child._lazyDetailBuild()
+            child._lazyDetailBuild = nil  -- one-shot
+        end
+        if child.args then
             local dw = detailContent:GetWidth() - O.PAD
             if dw <= 0 then dw = 360 end
             local bottomY = O.RenderWidgets(detailContent, child.args, dw)
