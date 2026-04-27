@@ -180,6 +180,36 @@ local function ResetPeaks()
 end
 
 ---------------------------------------------------------------------------
+-- Singleton widgets
+--
+-- Each Memory page widget is built ONCE and re-parented to the new
+-- content panel on every navigate-back-to-Memory. Without this, each
+-- visit ran the factory body again, creating fresh frames + textures
+-- (orphaning the previous set, which WoW frames never release). The
+-- 120-bar graph alone leaked ~480 KB per revisit. Now: build first,
+-- cheaply reparent for the rest of the session.
+---------------------------------------------------------------------------
+
+local singletons = {}  -- [factoryName] = { frame, height }
+
+local function GetOrCreateSingleton(name, builder, parent, contentWidth)
+    local s = singletons[name]
+    if s and s.frame then
+        s.frame:SetParent(parent)
+        s.frame:Show()
+        -- The new parent's content width might differ from the cached
+        -- one (window resize); update it on every reparent.
+        if s.frame.SetWidth and contentWidth then
+            s.frame:SetWidth(contentWidth)
+        end
+        return s.frame, s.height
+    end
+    local frame, height = builder(parent, contentWidth)
+    singletons[name] = { frame = frame, height = height }
+    return frame, height
+end
+
+---------------------------------------------------------------------------
 -- Block: memSummary
 --
 -- Big card at the top of the page. Title on the left, big total value
@@ -187,7 +217,7 @@ end
 -- current/peak ratio across the bottom.
 ---------------------------------------------------------------------------
 
-local function CreateMemSummaryWidget(parent, opt, contentWidth)
+local function BuildMemSummary(parent, contentWidth)
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetSize(contentWidth, SUMMARY_HEIGHT)
     frame:SetBackdrop({
@@ -257,7 +287,7 @@ local VALUE_W   = 80
 local ROW_GAP_X = 8
 local ROW_PAD   = 6  -- vertical padding between rows
 
-local function CreateMemBarListWidget(parent, opt, contentWidth)
+local function BuildMemBarList(parent, contentWidth)
     local addons = GetTrackedAddons()
     local rowCount = #addons
     local height = rowCount * ROW_HEIGHT + math.max(0, rowCount - 1) * 2 + ROW_PAD * 2
@@ -362,7 +392,7 @@ end
 -- we never recreate textures, just resize them per tick.
 ---------------------------------------------------------------------------
 
-local function CreateMemGraphWidget(parent, opt, contentWidth)
+local function BuildMemGraph(parent, contentWidth)
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetSize(contentWidth, GRAPH_HEIGHT)
     frame:SetBackdrop({
@@ -500,7 +530,7 @@ local GROWTH_WINDOW_SEC = 3600   -- 1 hour
 local MAX_GROWTH_ROWS   = 8
 local GROWTH_ROW_H      = 22
 
-local function CreateMemGrowthListWidget(parent, opt, contentWidth)
+local function BuildMemGrowthList(parent, contentWidth)
     local headerH    = 22
     local emptyH     = 22
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -643,7 +673,7 @@ local EVENT_LABELS = {
     zone         = "|cffd0a8ffZone|r",
 }
 
-local function CreateMemEventListWidget(parent, opt, contentWidth)
+local function BuildMemEventList(parent, contentWidth)
     local headerH = 22
     local emptyH  = 22
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -752,13 +782,31 @@ end
 
 ---------------------------------------------------------------------------
 -- Register the block factories
+--
+-- The factories the layout engine calls are thin wrappers over the
+-- Build* helpers + GetOrCreateSingleton. On first navigate to the
+-- Memory page they build the actual widgets; on every subsequent
+-- visit they just reparent the cached frame to the new content
+-- panel. Without this, each visit was creating 120 fresh graph-bar
+-- textures + a fresh bar-list + ... orphaning the previous set
+-- (frames in WoW persist forever once created).
 ---------------------------------------------------------------------------
 
-O.widgetFactories.memSummary    = CreateMemSummaryWidget
-O.widgetFactories.memBarList    = CreateMemBarListWidget
-O.widgetFactories.memGraph      = CreateMemGraphWidget
-O.widgetFactories.memGrowthList = CreateMemGrowthListWidget
-O.widgetFactories.memEventList  = CreateMemEventListWidget
+O.widgetFactories.memSummary = function(parent, opt, contentWidth)
+    return GetOrCreateSingleton("memSummary", BuildMemSummary, parent, contentWidth)
+end
+O.widgetFactories.memBarList = function(parent, opt, contentWidth)
+    return GetOrCreateSingleton("memBarList", BuildMemBarList, parent, contentWidth)
+end
+O.widgetFactories.memGraph = function(parent, opt, contentWidth)
+    return GetOrCreateSingleton("memGraph", BuildMemGraph, parent, contentWidth)
+end
+O.widgetFactories.memGrowthList = function(parent, opt, contentWidth)
+    return GetOrCreateSingleton("memGrowthList", BuildMemGrowthList, parent, contentWidth)
+end
+O.widgetFactories.memEventList = function(parent, opt, contentWidth)
+    return GetOrCreateSingleton("memEventList", BuildMemEventList, parent, contentWidth)
+end
 
 -- Mark the new types as full-width so the layout engine never tries
 -- to pair them in a two-column section.
