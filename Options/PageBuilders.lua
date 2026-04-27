@@ -241,26 +241,26 @@ end
 -- CreateManagedListPage
 --
 -- Standardized "list of editable items" page. Used wherever the user
--- has a collection of things (categories, drawers, bars, profiles…)
+-- has a collection of things (categories, drawers, bars, profiles...)
 -- and needs to:
 --   * Optionally Create new items via a button at the top of the list
 --   * Optionally Reset to defaults
 --   * Click each item to view / edit its details on the right
 --
 -- Visual design is intentionally cohesive with the User Manual page:
---   * Same title bar (O.BuildTitleBar) — addon icon, gold title, version
---   * Same list/detail chrome — gold-gradient selection highlight,
+--   * Same title bar (O.BuildTitleBar) - addon icon, gold title, version
+--   * Same list/detail chrome - gold-gradient selection highlight,
 --     shared list width (O.ResolveListWidth), shared backdrops
 --   * Detail panel auto-prepends an h1 with the item name, mirroring
 --     the User Manual's `{ type="h1", text=page.title }` convention
 --     (set `detailTitle = false` to opt out)
 --   * Detail content uses the same rich content blocks (paragraph, h3,
---     note, divider, list, table, …) interleaved with form widgets
+--     note, divider, list, table, ...) interleaved with form widgets
 --     (input, range, toggle, execute) so each page reads like docs
 --     that happen to be editable.
 --
 -- Returns a FUNCTION (not a table) so each Refresh re-reads getItems
--- — items can be added/removed/reordered between renders without
+-- - items can be added/removed/reordered between renders without
 -- re-registering the page. Pass the function directly to
 -- BazCore:RegisterOptionsTable.
 --
@@ -274,7 +274,7 @@ end
 --
 --   intro,               -- optional string, rendered as a single `lead`
 --                        -- block above the list/detail. Mutually exclusive
---                        -- with `introBlocks` — pass one or the other.
+--                        -- with `introBlocks` - pass one or the other.
 --   introBlocks,         -- optional array of content-block opt tables for
 --                        -- richer intros (lead + note + list, etc.).
 --                        -- Mirrors the User Manual page `blocks` field.
@@ -359,7 +359,7 @@ function BazCore:CreateManagedListPage(addonName, config)
         end
 
         -- Resolve the auto-h1 detail title behaviour up front.
-        --   nil / true  -> "h1" (default — matches User Manual)
+        --   nil / true  -> "h1" (default - matches User Manual)
         --   false       -> no auto-title
         --   "h2"/"h3"   -> use that heading level
         local detailTitleType
@@ -383,7 +383,7 @@ function BazCore:CreateManagedListPage(addonName, config)
             local detailArgs = {}
             local idx = 0
 
-            -- Auto-h1 page title — matches the User Manual's
+            -- Auto-h1 page title - matches the User Manual's
             -- RenderPageContent which prepends `{ type="h1", text=page.title }`
             -- to every page's blocks.
             if detailTitleType then

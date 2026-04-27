@@ -9,7 +9,7 @@
 
 local function OpenAddonOptions()
     HideUIPanel(AddonList)
-    -- Open directly to BazCore's options category — puts the user on the
+    -- Open directly to BazCore's options category - puts the user on the
     -- correct Settings tab with the Baz Suite sidebar expanded and ready.
     if BazCore.OpenOptionsPanel then
         BazCore:OpenOptionsPanel("BazCore")

@@ -421,7 +421,7 @@ local function CreateTableWidget(parent, opt, contentWidth)
 end
 
 ---------------------------------------------------------------------------
--- Collapsible block — animated expand/collapse with persistent state
+-- Collapsible block - animated expand/collapse with persistent state
 ---------------------------------------------------------------------------
 
 -- Saved state lives in BazCoreDB.collapsibles. The DB is created by

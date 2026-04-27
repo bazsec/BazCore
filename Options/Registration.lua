@@ -1,14 +1,14 @@
 ---------------------------------------------------------------------------
 -- BazCore Options: Registration & Window
 --
--- Provides the BazCore options window — a large standalone frame with:
+-- Provides the BazCore options window - a large standalone frame with:
 --   * Bottom tabs, one per top-level Baz addon
 --   * Left sidebar, one item per sub-category of the active addon
 --   * Content area on the right
 --
 -- Addons register via BazCore:RegisterOptionsTable() and
 -- BazCore:AddToSettings(). All options are displayed inside BazCore's
--- window — no longer registered with Blizzard's Settings panel.
+-- window - no longer registered with Blizzard's Settings panel.
 ---------------------------------------------------------------------------
 
 local O = BazCore._Options
@@ -137,7 +137,7 @@ local function CreateTwoPanelLayout(container, optionsTable)
 
     local yOffset = -O.PAD
 
-    -- Shared title bar (same one the User Manual uses) — addon icon,
+    -- Shared title bar (same one the User Manual uses) - addon icon,
     -- gold title, version, horizontal rule.
     local titleFrame, headerHeight = O.BuildTitleBar(container, {
         title        = optionsTable.name,
@@ -200,7 +200,7 @@ local function CreateTwoPanelLayout(container, optionsTable)
     --
     -- The wrapper-shape path is preserved for backwards compatibility.
     -- The sibling-shape path used to call BuildListDetailPanel once per
-    -- group, stacking N panels on top of each other — fixed by wrapping
+    -- group, stacking N panels on top of each other - fixed by wrapping
     -- the groups in a synthetic host so BuildListDetailPanel sees them
     -- as a single unified list.
     if #groupArgs == 1 then
@@ -240,7 +240,7 @@ local function RenderIntoCanvas(container, optionsTable)
     -- cached container._renderTarget / container._scrollFrame fields
     -- pointing to orphaned frames. Reusing an orphaned frame is the
     -- blank-page bug: GetParent() returns nil, GetLeft() stays nil,
-    -- and our polling TryRender exits on the parent check — so
+    -- and our polling TryRender exits on the parent check - so
     -- Layout() never runs. Starting fresh every render is cheap
     -- (just a Frame) and bypasses the problem entirely.
     if container._scrollFrame then
@@ -267,7 +267,7 @@ local function RenderIntoCanvas(container, optionsTable)
 
         -- Wait for the layout engine to resolve the render target's
         -- size before rendering. GetLeft() is nil until a frame has
-        -- been laid out. We *don't* render eagerly first — doing so
+        -- been laid out. We *don't* render eagerly first - doing so
         -- at a zero width has caused corrupted render state we can't
         -- recover from. Single deferred render at known-good width is
         -- the most reliable path we've found.
@@ -334,7 +334,7 @@ local function RenderIntoCanvas(container, optionsTable)
 
         -- Wait for the scroll frame to be laid out, then render once
         -- at the resolved width. Avoid rendering eagerly at zero width
-        -- — it's been a consistent source of blank-page bugs.
+        -- - it's been a consistent source of blank-page bugs.
         local attempts = 0
         local function TryRender()
             attempts = attempts + 1
@@ -540,7 +540,7 @@ local function EnsureWindow()
     content:SetPoint("BOTTOMRIGHT", -10, 12)
     f.contentWrapper = content
 
-    -- Sidebar (left side of content) — subtle border only so the
+    -- Sidebar (left side of content) - subtle border only so the
     -- PortraitFrameTemplate rocky background shows through
     local sidebar = CreateFrame("Frame", nil, content, "BackdropTemplate")
     sidebar:SetPoint("TOPLEFT", 0, 0)
@@ -560,7 +560,7 @@ local function EnsureWindow()
     divider:SetPoint("BOTTOMLEFT", sidebar, "BOTTOMRIGHT", 5, 0)
     divider:SetColorTexture(0.35, 0.3, 0.18, 0.6)
 
-    -- Content panel (right of sidebar) — also transparent
+    -- Content panel (right of sidebar) - also transparent
     local contentPanel = CreateFrame("Frame", nil, content)
     contentPanel:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", 12, 0)
     contentPanel:SetPoint("BOTTOMRIGHT", 0, 0)
@@ -649,7 +649,7 @@ function BazCore:AddToSettings(addonName, displayName, parentName)
 
     -- Only BazCore registers with Blizzard's Settings panel as a stub.
     -- Other Baz addons are accessed via the BazCore options window's
-    -- bottom tabs — no need to clutter Blizzard's AddOn list with all of them.
+    -- bottom tabs - no need to clutter Blizzard's AddOn list with all of them.
     if addonName == "BazCore" and not parentName and not entry.blizzardCategory
         and Settings and Settings.RegisterCanvasLayoutCategory then
         local stub = CreateBlizzardStub(addonName, entry.displayName)

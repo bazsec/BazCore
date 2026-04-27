@@ -26,7 +26,7 @@ function O.RegisterFullWidthBlockType(blockType)
 end
 
 ---------------------------------------------------------------------------
--- RenderWidgets — main layout function
+-- RenderWidgets - main layout function
 -- Renders sorted args into a parent frame. Supports:
 --   * Single column (narrow or forced)
 --   * Two-column bordered panels (wide enough, auto-detected)

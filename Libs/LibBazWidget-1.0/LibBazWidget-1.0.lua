@@ -10,7 +10,7 @@
 -- minimum an `id` field. Consumers call :GetWidgets() to enumerate and
 -- :RegisterCallback(fn) to be notified when the registry changes.
 --
--- No WoW frames, events, or saved variables — pure data registry.
+-- No WoW frames, events, or saved variables - pure data registry.
 --
 -- Widget contract (publishers populate, consumers read):
 --   Required:

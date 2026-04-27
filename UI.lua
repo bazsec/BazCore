@@ -354,7 +354,7 @@ end
 ---------------------------------------------------------------------------
 -- Portrait Window
 --
--- Spawns a Frame using Blizzard's PortraitFrameFlatTemplate — the same
+-- Spawns a Frame using Blizzard's PortraitFrameFlatTemplate - the same
 -- gold-ornate-bordered window with a portrait circle in the top-left
 -- corner that the combined bag, character pane, and most major
 -- Blizzard panels use. Centralised here so any Baz addon wanting a
@@ -452,9 +452,9 @@ function BazCore:CreatePortraitWindow(globalName, opts)
         tinsert(UISpecialFrames, globalName)
     end
 
-    -- Portrait interactivity — adds a click overlay on top of the
+    -- Portrait interactivity - adds a click overlay on top of the
     -- circular portrait so the consumer can hook clicks (typically
-    -- right-click → menu/popup) and a tooltip on hover. Only creates
+    -- right-click > menu/popup) and a tooltip on hover. Only creates
     -- the overlay when one of the two opts is set.
     if (opts.portraitTooltip or opts.portraitOnClick)
        and f.PortraitContainer and f.PortraitContainer.portrait then
@@ -501,9 +501,9 @@ end
 ---------------------------------------------------------------------------
 -- BazCore:CreateItemButton(parent, opts) -> Button
 --
--- Builds a vanilla Button frame styled like Blizzard's ItemButton —
+-- Builds a vanilla Button frame styled like Blizzard's ItemButton -
 -- icon, quality border, optional slot background, optional count and
--- cooldown — without inheriting any XML template. Both
+-- cooldown - without inheriting any XML template. Both
 -- ItemButtonTemplate and BagSlotButtonTemplate exist in retail
 -- Midnight's XML but aren't exposed as runtime CreateFrame targets,
 -- so any addon trying to inherit them throws "Couldn't find inherited
@@ -514,7 +514,7 @@ end
 --   size       number   button edge length, default 36
 --   name       string   global name (omit for anonymous)
 --   slotAtlas  string   atlas drawn behind the icon (e.g. the
---                       "bags-item-slot64" empty-slot artwork) — when
+--                       "bags-item-slot64" empty-slot artwork) - when
 --                       no item is set the slot art shows through
 --   quality    bool     create a quality border child (default true)
 --   count      bool     create a stack-count fontstring (default false)
@@ -534,7 +534,7 @@ end
 --   .Count           (only if count was enabled)
 --   .Cooldown        (only if cooldown was enabled)
 --
--- Click + drag handlers are deliberately NOT wired here — the caller
+-- Click + drag handlers are deliberately NOT wired here - the caller
 -- attaches whatever scripts make sense (PickupBagFromSlot,
 -- UseContainerItem, custom popup logic, etc.).
 ---------------------------------------------------------------------------
@@ -546,7 +546,7 @@ function BazCore:CreateItemButton(parent, opts)
     local btn = CreateFrame("Button", opts.name, parent)
     btn:SetSize(size, size)
 
-    -- Empty-slot artwork — drawn under the icon, so when no item is
+    -- Empty-slot artwork - drawn under the icon, so when no item is
     -- assigned the slot art shows through.
     if opts.slotAtlas then
         btn.SlotBackground = btn:CreateTexture(nil, "BACKGROUND")
@@ -554,7 +554,7 @@ function BazCore:CreateItemButton(parent, opts)
         btn.SlotBackground:SetAllPoints()
     end
 
-    -- Item icon — 1 px inset on each side leaves room for the
+    -- Item icon - 1 px inset on each side leaves room for the
     -- quality border + standard ItemButton bevel pattern.
     btn.icon = btn:CreateTexture(nil, "BORDER")
     btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)

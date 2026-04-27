@@ -1,6 +1,6 @@
 ---------------------------------------------------------------------------
 -- BazCore: Profiles Module
--- Unified profile system — one profile controls all Baz Suite addons
+-- Unified profile system - one profile controls all Baz Suite addons
 -- Profiles stored in BazCoreDB.profiles[profileName][addonName] = { ... }
 ---------------------------------------------------------------------------
 
@@ -205,7 +205,7 @@ function BazCore:ResolveProfile()
 end
 
 ---------------------------------------------------------------------------
--- Profile Management API (unified — no addonName parameter)
+-- Profile Management API (unified - no addonName parameter)
 ---------------------------------------------------------------------------
 
 function BazCore:GetActiveProfile()
@@ -500,7 +500,7 @@ end
 
 ---------------------------------------------------------------------------
 -- Auto-Generated Profile Options Table
--- Unified — one Profiles page in BazCore settings for all addons
+-- Unified - one Profiles page in BazCore settings for all addons
 ---------------------------------------------------------------------------
 
 function BazCore:GetProfileOptionsTable()

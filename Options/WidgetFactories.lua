@@ -138,7 +138,7 @@ local function CreateRangeWidget(parent, opt, contentWidth)
     -- hit-testing the cursor against the thumb texture's exact rect.
     -- That rect is small (~16x16) and clicks landing on what visually
     -- looks like the thumb often miss it, getting routed as page-step
-    -- clicks instead — so the slider feels ungrabbable on long ranges.
+    -- clicks instead - so the slider feels ungrabbable on long ranges.
     --
     -- This invisible button covers the entire trough. Mouse-down sets
     -- the slider value to the cursor's fractional position, then
@@ -175,7 +175,7 @@ local function CreateRangeWidget(parent, opt, contentWidth)
         self:SetScript("OnUpdate", nil)
         -- Commit the final value. OnValueChanged below skips opt.set
         -- while `dragging` is true, so the setter fires exactly once
-        -- per drag here on release — important for setters with
+        -- per drag here on release - important for setters with
         -- expensive side effects (Categories.Reorder rebuilds the bag).
         if opt.set then
             local v = math.floor(slider.Slider:GetValue() / step + 0.5) * step
@@ -201,7 +201,7 @@ local function CreateRangeWidget(parent, opt, contentWidth)
 
     -- OnValueChanged updates the visual surfaces (label + editbox) on
     -- every change for live feedback. opt.set is suppressed while a
-    -- drag is in progress — overlay's OnMouseUp commits exactly once
+    -- drag is in progress - overlay's OnMouseUp commits exactly once
     -- on release. Stepper buttons and the editbox commit via direct
     -- SetValue calls outside any drag, so this branch fires opt.set
     -- for them as before.
@@ -358,7 +358,7 @@ local function CreateSelectWidget(parent, opt, contentWidth)
     btn:SetPoint("TOPLEFT", 0, -22)
     btn:SetHeight(22)
 
-    -- Measuring FontString — same family as UIPanelButtonTemplate uses,
+    -- Measuring FontString - same family as UIPanelButtonTemplate uses,
     -- hidden so it doesn't render. We poke text into it just to read
     -- back the rendered width without disturbing the button's label.
     local probe = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")

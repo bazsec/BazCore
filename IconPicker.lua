@@ -5,8 +5,8 @@
 -- a scrollable grid of icons. Any BazCore addon can open it with:
 --
 --   BazCore:ShowIconPicker(callback, currentIcon)
---     callback(texturePath) — called when the user picks an icon
---     currentIcon           — optional, highlights the current selection
+--     callback(texturePath) - called when the user picks an icon
+--     currentIcon           - optional, highlights the current selection
 --
 -- Uses GetMacroItemIcons/GetMacroSpellIcons for the full WoW icon library.
 ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ local CATEGORIES = {
     { id = "items",      label = "Items" },
 }
 
--- Spell name → icon cache, built via coroutine (WeakAuras/MacroIconSearch approach)
+-- Spell name > icon cache, built via coroutine (WeakAuras/MacroIconSearch approach)
 local spellIconCache = {}   -- [lowerName] = fileDataID
 local iconToName = {}       -- [fileDataID] = displayName (first spell name found)
 local cacheReady = false

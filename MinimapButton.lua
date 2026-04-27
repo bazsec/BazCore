@@ -77,7 +77,7 @@ local function CreateButton()
     bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
     bg:SetVertexColor(0.1, 0.1, 0.15, 0.8)
 
-    -- Icon — masked to a circle so it blends into the minimap-button
+    -- Icon - masked to a circle so it blends into the minimap-button
     -- tracking border instead of showing as a square inside a ring.
     -- SetMask uses the alpha channel of the mask texture to clip the
     -- icon; `TempPortraitAlphaMask` is Blizzard's standard circular

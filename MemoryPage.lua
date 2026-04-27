@@ -3,7 +3,7 @@
 --
 -- Live snapshot of Baz Suite memory consumption. Three new block types
 -- plug into the existing options layout engine so the page itself is a
--- plain options table — no custom rendering, no special-case code in
+-- plain options table - no custom rendering, no special-case code in
 -- Registration.lua. Each block subscribes to a shared sampler that
 -- ticks via C_Timer; subscribers self-prune when their frames orphan
 -- (i.e. when the user navigates away and ClearChildren orphans them).
@@ -23,7 +23,7 @@ local ROW_HEIGHT      = 26
 local GRAPH_HEIGHT    = 170
 
 ---------------------------------------------------------------------------
--- Shared state — populated by the sampler, read by every block.
+-- Shared state - populated by the sampler, read by every block.
 ---------------------------------------------------------------------------
 
 local state = {
@@ -37,7 +37,7 @@ local state = {
 for i = 1, HISTORY_LEN do state.history[i] = 0 end
 
 ---------------------------------------------------------------------------
--- Tracked addons — BazCore plus every addon registered through it.
+-- Tracked addons - BazCore plus every addon registered through it.
 -- Sorted alphabetically with BazCore pinned first so it always sits
 -- at the top of the bar list.
 ---------------------------------------------------------------------------
@@ -69,13 +69,13 @@ local function GetAddonDisplayName(name)
 end
 
 local function FormatKB(kb)
-    if not kb then return "—" end
+    if not kb then return "-" end
     if kb >= 1024 then return string.format("%.2f MB", kb / 1024) end
     return string.format("%.0f KB", kb)
 end
 
 ---------------------------------------------------------------------------
--- Sampler — runs once via C_Timer, no per-block polling. Subscribers
+-- Sampler - runs once via C_Timer, no per-block polling. Subscribers
 -- pass a frame + refresh callback; on every tick we call each callback
 -- whose frame is still parented (ClearChildren reparents to nil, which
 -- is our cue to drop the subscription).
@@ -110,7 +110,7 @@ local function Tick()
 
     -- Iterate, calling live subscribers and dropping orphaned ones.
     -- ClearChildren reparents to nil so :GetParent() reports nil for
-    -- frames whose page was unloaded — easy liveness signal.
+    -- frames whose page was unloaded - easy liveness signal.
     local live = {}
     for _, sub in ipairs(subscribers) do
         if sub.frame and sub.frame:GetParent() then
@@ -173,12 +173,12 @@ local function CreateMemSummaryWidget(parent, opt, contentWidth)
 
     local totalVal = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightHuge")
     totalVal:SetPoint("RIGHT", -20, 8)
-    totalVal:SetText("…")
+    totalVal:SetText("...")
     totalVal:SetTextColor(0.4, 0.85, 1)
 
     local peakLbl = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     peakLbl:SetPoint("TOPRIGHT", totalVal, "BOTTOMRIGHT", 0, -2)
-    peakLbl:SetText("peak: …")
+    peakLbl:SetText("peak: ...")
     peakLbl:SetTextColor(0.7, 0.7, 0.7)
 
     local bar = CreateFrame("StatusBar", nil, frame)
@@ -271,7 +271,7 @@ local function CreateMemBarListWidget(parent, opt, contentWidth)
         row.value:SetPoint("LEFT", bar, "RIGHT", ROW_GAP_X, 0)
         row.value:SetWidth(VALUE_W)
         row.value:SetJustifyH("RIGHT")
-        row.value:SetText("…")
+        row.value:SetText("...")
 
         -- Percent of total (far right)
         row.pct = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -279,7 +279,7 @@ local function CreateMemBarListWidget(parent, opt, contentWidth)
         row.pct:SetWidth(PCT_W)
         row.pct:SetJustifyH("RIGHT")
         row.pct:SetTextColor(0.65, 0.65, 0.65)
-        row.pct:SetText("…")
+        row.pct:SetText("...")
 
         rows[name] = row
     end
@@ -320,7 +320,7 @@ end
 -- Block: memGraph
 --
 -- Time-series histogram of the total memory readings over the last
--- HISTORY_LEN samples. Pool of vertical bar textures, one per slot —
+-- HISTORY_LEN samples. Pool of vertical bar textures, one per slot -
 -- we never recreate textures, just resize them per tick.
 ---------------------------------------------------------------------------
 
@@ -338,14 +338,14 @@ local function CreateMemGraphWidget(parent, opt, contentWidth)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     title:SetPoint("TOPLEFT", 16, -10)
-    title:SetText("Total memory — last 60 seconds")
+    title:SetText("Total memory - last 60 seconds")
     title:SetTextColor(0.9, 0.9, 0.9)
 
     -- Rolling-window max, shown next to the title.
     local maxLbl = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     maxLbl:SetPoint("TOPRIGHT", -16, -10)
     maxLbl:SetTextColor(0.7, 0.7, 0.7)
-    maxLbl:SetText("…")
+    maxLbl:SetText("...")
 
     -- X-axis labels: oldest sample on the left, newest on the right.
     local oldestLbl = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")

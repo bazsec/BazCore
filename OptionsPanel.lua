@@ -1,6 +1,6 @@
 ---------------------------------------------------------------------------
 -- BazCore: OptionsPanel
--- Thin loader — the actual implementation lives in Options/*.lua
+-- Thin loader - the actual implementation lives in Options/*.lua
 -- This file exists for backward compatibility (any addon that might
 -- reference OptionsPanel.lua directly).
 ---------------------------------------------------------------------------

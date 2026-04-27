@@ -165,7 +165,7 @@ local function RenderPageContent(parent, page, contentWidth)
 
     -- Hook each block's _onHeightChanged so any collapsible that grows
     -- or shrinks triggers a full re-flow. Non-collapsible blocks never
-    -- fire the hook — assigning the field is harmless.
+    -- fire the hook - assigning the field is harmless.
     for _, item in ipairs(items) do
         item.widget._onHeightChanged = Reflow
     end
@@ -288,7 +288,7 @@ local function NormalizeGuide(guide)
                 text  = section.text,
             }
         end
-        -- Don't mutate caller's table — clone the relevant fields
+        -- Don't mutate caller's table - clone the relevant fields
         return {
             title    = guide.title,
             intro    = guide.intro,
@@ -426,7 +426,7 @@ end
 ---------------------------------------------------------------------------
 
 -- RegisterUserGuide: each addon's guide becomes a "User Guide" sub-category
--- under that addon's own bottom tab. No separate User Manual tab — docs
+-- under that addon's own bottom tab. No separate User Manual tab - docs
 -- live next to the settings they describe.
 function BazCore:RegisterUserGuide(addonName, guide)
     if type(addonName) ~= "string" or addonName == "" then return end
@@ -464,7 +464,7 @@ BazCore:RegisterUserGuide("BazCore", {
         {
             title = "Welcome",
             blocks = {
-                { type = "lead", text = "BazCore is a framework — it has no visible features on its own. Its job is to host the rest of the Baz Suite addons and provide them with a unified options window, profile system, minimap button, and shared APIs." },
+                { type = "lead", text = "BazCore is a framework - it has no visible features on its own. Its job is to host the rest of the Baz Suite addons and provide them with a unified options window, profile system, minimap button, and shared APIs." },
                 { type = "note", style = "info", text = "Everything in this manual is registered by an addon when it loads. What you see depends on which Baz addons you have installed." },
                 { type = "h2", text = "What you'll find here" },
                 { type = "list", items = {
@@ -487,11 +487,11 @@ BazCore:RegisterUserGuide("BazCore", {
         },
         {
             title = "The Baz Suite",
-            text = "Each Baz addon plugs into this window as a bottom tab. Only BazCore itself appears in Blizzard's AddOn Settings list — its \"Open Options\" button jumps here.",
+            text = "Each Baz addon plugs into this window as a bottom tab. Only BazCore itself appears in Blizzard's AddOn Settings list - its \"Open Options\" button jumps here.",
             children = {
                 { title = "BazBars",              text = "Custom extra action bars with full Edit Mode support." },
                 { title = "BazWidgetDrawers",     text = "A slide-out drawer that hosts dockable widgets along the side of your screen." },
-                { title = "BazWidgets",           text = "A pack of 13 ready-made widgets for BazWidgetDrawers — gold tracker, coordinates, stats, currencies, calculator, to-do list, and more." },
+                { title = "BazWidgets",           text = "A pack of 13 ready-made widgets for BazWidgetDrawers - gold tracker, coordinates, stats, currencies, calculator, to-do list, and more." },
                 { title = "BazNotificationCenter", text = "A toast notification system that surfaces important game events as polished popups." },
                 { title = "BazLootNotifier",      text = "Animated loot popups that fly across your screen as you pick items up." },
                 { title = "BazFlightZoom",        text = "Auto-zooms your camera while you're on a flying mount, then restores it when you land." },
@@ -501,20 +501,23 @@ BazCore:RegisterUserGuide("BazCore", {
         },
         {
             title = "Opening the Options Window",
-            text = "There are several ways to open this window:",
-            children = {
-                { title = "Minimap Button",  text = "Left-click toggles the default addon. Right-click opens a menu listing every Baz addon — pick one to jump to its tab." },
-                { title = "Addon Compartment", text = "The Baz icon in Blizzard's compartment dropdown behaves the same way as the minimap button." },
-                { title = "Slash Commands",  text = "|cff00ff00/bazcore|r opens this window directly to BazCore. Each addon also has its own slash command (|cff00ff00/bazbars|r, |cff00ff00/bwd|r, |cff00ff00/bnc|r, etc.) that opens with that addon's tab active." },
+            blocks = {
+                { type = "lead", text = "There are several ways to open this window." },
+                { type = "h3", text = "Minimap Button" },
+                { type = "paragraph", text = "Left-click toggles the default addon. Right-click opens a menu listing every Baz addon - pick one to jump to its tab." },
+                { type = "h3", text = "Addon Compartment" },
+                { type = "paragraph", text = "The Baz icon in Blizzard's compartment dropdown behaves the same way as the minimap button." },
+                { type = "h3", text = "Slash Commands" },
+                { type = "paragraph", text = "|cff00ff00/bazcore|r opens this window directly to BazCore. Each addon also has its own slash command (|cff00ff00/bazbars|r, |cff00ff00/bwd|r, |cff00ff00/bnc|r, etc.) that opens with that addon's tab active." },
             },
         },
         {
             title = "Profiles",
-            text = "Every Baz addon supports per-character profiles. You can use the default profile, share settings across characters, or give each character its own configuration.\n\nOpen any addon's |cffffd700Profiles|r sub-category to:\n  • Create a new profile\n  • Switch the active profile for this character\n  • Copy settings from another profile\n  • Reset or delete a profile\n\nProfiles are stored per-addon — switching your BazBars profile doesn't affect your BazWidgetDrawers profile.",
+            text = "Every Baz addon supports per-character profiles. You can use the default profile, share settings across characters, or give each character its own configuration.\n\nOpen any addon's |cffffd700Profiles|r sub-category to:\n  • Create a new profile\n  • Switch the active profile for this character\n  • Copy settings from another profile\n  • Reset or delete a profile\n\nProfiles are stored per-addon - switching your BazBars profile doesn't affect your BazWidgetDrawers profile.",
         },
         {
             title = "Global Options",
-            text = "Addons with many modules or widgets expose a |cffffd700Global Options|r sub-category. These are overrides that apply to every module at once.\n\nFor example, BazWidgets has per-widget settings for fade alpha, title visibility, and font size. If you enable a global override for \"Title Bar\", every widget hides its title — regardless of its individual setting. Disable the override to return each widget to its own setting.\n\nThis is the fastest way to apply a consistent look across many widgets or bars without editing each one.",
+            text = "Addons with many modules or widgets expose a |cffffd700Global Options|r sub-category. These are overrides that apply to every module at once.\n\nFor example, BazWidgets has per-widget settings for fade alpha, title visibility, and font size. If you enable a global override for \"Title Bar\", every widget hides its title - regardless of its individual setting. Disable the override to return each widget to its own setting.\n\nThis is the fastest way to apply a consistent look across many widgets or bars without editing each one.",
         },
         {
             title = "Edit Mode Integration",
@@ -531,26 +534,26 @@ BazCore:RegisterUserGuide("BazCore", {
                 { type = "code", text = "BazCore:RegisterUserGuide(\"MyAddon\", {\n    title = \"My Addon\",\n    intro = \"One-line summary.\",\n    pages = {\n        { title = \"Welcome\", blocks = { ... } },\n    },\n})" },
                 { type = "h3", text = "Block types you can use in pages" },
                 { type = "list", items = {
-                    "h1 / h2 / h3 / h4 — heading hierarchy",
-                    "paragraph / lead / caption / quote — text styles",
-                    "list — bulleted or numbered, supports nesting",
-                    "image — texture, atlas, or fileID with caption",
-                    "note — tip / info / warning / danger callouts",
-                    "code — monospace block for slash commands and macros",
-                    "table — header row + data rows",
-                    "collapsible — animated expand/collapse with persistent state",
-                    "divider / spacer — layout helpers",
+                    "h1 / h2 / h3 / h4 - heading hierarchy",
+                    "paragraph / lead / caption / quote - text styles",
+                    "list - bulleted or numbered, supports nesting",
+                    "image - texture, atlas, or fileID with caption",
+                    "note - tip / info / warning / danger callouts",
+                    "code - monospace block for slash commands and macros",
+                    "table - header row + data rows",
+                    "collapsible - animated expand/collapse with persistent state",
+                    "divider / spacer - layout helpers",
                 }},
                 { type = "collapsible", title = "Try a collapsible", style = "h3", blocks = {
-                    { type = "paragraph", text = "Collapsibles persist their state across sessions automatically — give them a |cffffd700key|r to control where the state is stored, or rely on the auto-derived key based on the title." },
+                    { type = "paragraph", text = "Collapsibles persist their state across sessions automatically - give them a |cffffd700key|r to control where the state is stored, or rely on the auto-derived key based on the title." },
                     { type = "note", style = "tip", text = "Collapsibles can contain other collapsibles. Nest as deep as you want." },
                 }},
                 { type = "h3", text = "Other APIs" },
                 { type = "list", items = {
-                    "RegisterDockableWidget — host a widget inside BazWidgetDrawers",
-                    "Profiles — per-character settings wiring",
-                    "MinimapButton — share the Baz minimap button",
-                    "EditMode — register frames into Blizzard's Edit Mode",
+                    "RegisterDockableWidget - host a widget inside BazWidgetDrawers",
+                    "Profiles - per-character settings wiring",
+                    "MinimapButton - share the Baz minimap button",
+                    "EditMode - register frames into Blizzard's Edit Mode",
                 }},
                 { type = "note", style = "info", text = "See |cffffd700BAZ_SUITE_DEVELOPER_REFERENCE.txt|r in the BazCore folder for the full API reference with code examples." },
             },

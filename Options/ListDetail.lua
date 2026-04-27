@@ -104,7 +104,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     -- Detect source-based grouping. When ANY child group declares a
     -- `source`, switch to collapsible-section rendering: one header
     -- per source, children listed under it. Without this, all the
-    -- child groups would render flat — fine for short lists but
+    -- child groups would render flat - fine for short lists but
     -- noisy for wide lists like the BWD Widgets page once a user
     -- has many LDB feeds installed.
     local hasSourceGrouping = false
@@ -116,7 +116,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     -- list rebuilds when sections are expanded/collapsed). Falls back
     -- to nil if the previously selected item no longer exists.
     local selectedKey = container._lastSelectedItem
-    -- Legacy: older sessions stored an integer index. Drop it — the
+    -- Legacy: older sessions stored an integer index. Drop it - the
     -- restore path below will pick the first available group instead.
     if type(selectedKey) ~= "string" then selectedKey = nil end
 

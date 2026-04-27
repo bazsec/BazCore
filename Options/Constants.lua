@@ -93,7 +93,7 @@ end
 --
 -- Returns a {textures...} group that the caller toggles via Show()/Hide()
 -- when the row's selection state changes. Mirrors the highlight used by
--- Traveler's Log + Quest tracker dialogues — two horizontal bands
+-- Traveler's Log + Quest tracker dialogues - two horizontal bands
 -- fading inward to a centre crest, plus thin gold lines at top + bottom
 -- that fade to transparent at each edge.
 --
@@ -158,7 +158,7 @@ function O.ShowHighlightGroup(group, show)
 end
 
 ---------------------------------------------------------------------------
--- List/detail layout dimensions — shared so the User Manual tree and
+-- List/detail layout dimensions - shared so the User Manual tree and
 -- the standard list/detail panel resolve to the same widths regardless
 -- of the container size. ListDetail used to clamp at 22 % / 180-320 px;
 -- the User Manual at 28 % / 200-320. Settling on the User Manual's
@@ -178,7 +178,7 @@ function O.ResolveListWidth(containerWidth)
 end
 
 ---------------------------------------------------------------------------
--- BuildTitleBar — shared header used by both the User Manual page and
+-- BuildTitleBar - shared header used by both the User Manual page and
 -- the standard list/detail page. Includes the addon icon (if available),
 -- gold title text, optional version line, and a horizontal rule
 -- underneath. Returns (frame, height) so the caller can advance its

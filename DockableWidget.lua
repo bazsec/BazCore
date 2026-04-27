@@ -3,7 +3,7 @@
 --
 -- Thin compatibility shim that delegates to LibBazWidget-1.0 when
 -- available. All existing code calling BazCore:RegisterDockableWidget()
--- continues to work — the shim just forwards to the standalone library.
+-- continues to work - the shim just forwards to the standalone library.
 --
 -- If LibBazWidget-1.0 is not installed, the shim falls back to a local
 -- inline registry (identical behavior to pre-library versions) so
@@ -24,7 +24,7 @@ local LBW = LibStub and LibStub("LibBazWidget-1.0", true)
 
 if LBW then
     ---------------------------------------------------------------------------
-    -- LibBazWidget available — delegate everything
+    -- LibBazWidget available - delegate everything
     ---------------------------------------------------------------------------
     function BazCore:RegisterDockableWidget(widget)
         LBW:RegisterWidget(widget)

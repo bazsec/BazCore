@@ -167,7 +167,7 @@ BazCore:QueueForLogin(function()
         })
 
         -- Suite version list. The dedicated Memory Usage sub-page
-        -- (MemoryPage.lua) handles the live memory readout — this
+        -- (MemoryPage.lua) handles the live memory readout - this
         -- landing page just orients the user with version info.
         local versionLines = {}
         local sorted = {}
