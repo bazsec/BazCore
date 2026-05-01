@@ -107,43 +107,53 @@ local function CreateDialog()
     -- Options window / list-detail / User Manual panels use - so the
     -- copy dialog visually matches the rest of the BazCore UI rather
     -- than the chunky stock UIPanelScrollFrameTemplate look.
-    local scroll = CreateFrame("ScrollFrame", nil, f)
-    scroll:SetPoint("TOPLEFT", 16, -56)
-    scroll:SetPoint("BOTTOMRIGHT", -22, 50)   -- leaves room for scrollbar
-    scroll:EnableMouseWheel(true)
-    f.scroll = scroll
-
-    local scrollBar = CreateFrame("EventFrame", nil, f, "MinimalScrollBar")
-    scrollBar:SetPoint("TOPLEFT",     scroll, "TOPRIGHT",    2, 0)
-    scrollBar:SetPoint("BOTTOMLEFT",  scroll, "BOTTOMRIGHT", 2, 0)
-    if ScrollUtil and ScrollUtil.InitScrollFrameWithScrollBar then
-        ScrollUtil.InitScrollFrameWithScrollBar(scroll, scrollBar)
-    end
-    f.scrollBar = scrollBar
-
-    -- The edit area: a child frame inside the scroll, sized to the
-    -- scroll's width with a backdrop matching the Options panels.
-    local editFrame = CreateFrame("Frame", nil, scroll, "BackdropTemplate")
-    editFrame:SetSize(DEFAULT_W - 38, DEFAULT_H - 110)
-    editFrame:SetBackdrop({
+    --
+    -- IMPORTANT: the EditBox is the DIRECT scroll child (not wrapped in
+    -- a backdrop frame). When a multi-line EditBox sits inside an
+    -- intermediate scroll-child frame, WoW's selection highlight
+    -- rectangles desync from the visible text under ScrollUtil-driven
+    -- scrolling - the highlight bands stay parked at their original
+    -- y-positions while the text scrolls past underneath. Putting the
+    -- EditBox as the scroll child directly keeps the highlight glued
+    -- to the text. The backdrop visual is drawn on a sibling frame
+    -- BEHIND the scroll viewport.
+    local editBg = CreateFrame("Frame", nil, f, "BackdropTemplate")
+    editBg:SetPoint("TOPLEFT", 16, -56)
+    editBg:SetPoint("BOTTOMRIGHT", -22, 50)
+    editBg:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile     = false, edgeSize = 8,
         insets   = { left = 2, right = 2, top = 2, bottom = 2 },
     })
-    editFrame:SetBackdropColor(0.03, 0.03, 0.05, 0.6)
-    editFrame:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.6)
-    scroll:SetScrollChild(editFrame)
-    f.editFrame = editFrame
+    editBg:SetBackdropColor(0.03, 0.03, 0.05, 0.6)
+    editBg:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.6)
+    f.editBg = editBg
 
-    local editBox = CreateFrame("EditBox", nil, editFrame)
+    local scroll = CreateFrame("ScrollFrame", nil, f)
+    scroll:SetPoint("TOPLEFT",     editBg, "TOPLEFT",      6, -6)
+    scroll:SetPoint("BOTTOMRIGHT", editBg, "BOTTOMRIGHT", -6,  6)
+    scroll:EnableMouseWheel(true)
+    f.scroll = scroll
+
+    local scrollBar = CreateFrame("EventFrame", nil, f, "MinimalScrollBar")
+    scrollBar:SetPoint("TOPLEFT",     scroll, "TOPRIGHT",    4, 0)
+    scrollBar:SetPoint("BOTTOMLEFT",  scroll, "BOTTOMRIGHT", 4, 0)
+    if ScrollUtil and ScrollUtil.InitScrollFrameWithScrollBar then
+        ScrollUtil.InitScrollFrameWithScrollBar(scroll, scrollBar)
+    end
+    f.scrollBar = scrollBar
+
+    -- EditBox is the scroll child directly. Width is set in ApplySize;
+    -- height auto-grows with multi-line content so the ScrollFrame's
+    -- scroll range matches the actual text extent.
+    local editBox = CreateFrame("EditBox", nil, scroll)
     editBox:SetMultiLine(true)
     editBox:SetMaxLetters(0)              -- 0 = unlimited
     editBox:SetFontObject("ChatFontNormal")
     editBox:SetAutoFocus(false)
-    editBox:SetPoint("TOPLEFT", 8, -8)
-    editBox:SetPoint("BOTTOMRIGHT", -8, 8)
     editBox:SetScript("OnEscapePressed", close)
+    scroll:SetScrollChild(editBox)
     -- Re-highlight on focus so a fresh copy flow stays one-step.
     editBox:SetScript("OnEditFocusGained", function(self)
         if currentOpts and currentOpts._autoHighlight then
@@ -195,14 +205,15 @@ local function CreateDialog()
     return f
 end
 
--- Resize the editFrame to match the dialog's interior so the EditBox
--- has correct width for word-wrap. Called whenever the dialog size
--- changes from its previous opts. Insets account for: 16px left edge,
--- 22px right edge (scroll + scrollbar), 56px top, 50px bottom.
+-- Resize the dialog and recompute the EditBox width so word-wrap fits
+-- the new viewport. The EditBox auto-grows in height with content, so
+-- nothing else needs explicit sizing. Insets:
+--   editBg: TOPLEFT 16, -56  /  BOTTOMRIGHT -22, 50
+--   scroll: 6px inside editBg on every side
+--   editBox width = scroll viewport (= dialog w - 16 - 22 - 6 - 6 = w - 50)
 local function ApplySize(f, w, h)
     f:SetSize(w, h)
-    f.editFrame:SetSize(w - 38, h - 110)
-    f.editBox:SetWidth(w - 38 - 16)
+    f.editBox:SetWidth(w - 50)
 end
 
 function BazCore:OpenCopyDialog(opts)
