@@ -103,15 +103,24 @@ end
 ---------------------------------------------------------------------------
 
 function O.BuildSelectionHighlight(row, rowH)
+    -- Two-anchor placement (corner + center) so each half always
+    -- spans LEFT-edge-to-center or center-to-RIGHT-edge regardless of
+    -- the row's current width. Earlier versions used SetSize(halfW)
+    -- captured at construction time, which left a black gap in the
+    -- middle when the row grew during a later layout pass.
     rowH = rowH or row:GetHeight() or 26
-    local rowW = row:GetWidth() or 200
-    local halfW = math.floor(rowW / 2)
 
-    local function MakeBand(layer, anchor, fadeFromCenter)
+    local function MakeBand(layer, side, fadeFromCenter)
         local tex = row:CreateTexture(nil, layer)
         tex:SetColorTexture(1, 1, 1, 1)
-        tex:SetSize(halfW, rowH)
-        tex:SetPoint(anchor, 0, 0)
+        tex:SetHeight(rowH)
+        if side == "LEFT" then
+            tex:SetPoint("TOPLEFT",     row, "TOPLEFT",     0, 0)
+            tex:SetPoint("BOTTOMRIGHT", row, "BOTTOM",      0, 0)
+        else  -- RIGHT
+            tex:SetPoint("TOPLEFT",     row, "TOP",         0, 0)
+            tex:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+        end
         if fadeFromCenter then
             tex:SetGradient("HORIZONTAL",
                 CreateColor(1, 0.82, 0, 0.45),
@@ -124,11 +133,23 @@ function O.BuildSelectionHighlight(row, rowH)
         return tex
     end
 
-    local function MakeRule(anchor1, anchor2, fadeFromCenter)
+    local function MakeRule(corner, fadeFromCenter)
         local tex = row:CreateTexture(nil, "OVERLAY")
         tex:SetColorTexture(1, 1, 1, 1)
-        tex:SetSize(halfW, 1)
-        tex:SetPoint(anchor1, 0, 0)
+        tex:SetHeight(1)
+        if corner == "TOPLEFT" then
+            tex:SetPoint("TOPLEFT",     row, "TOPLEFT",   0, 0)
+            tex:SetPoint("BOTTOMRIGHT", row, "TOP",       0, -1)
+        elseif corner == "TOPRIGHT" then
+            tex:SetPoint("TOPLEFT",     row, "TOP",       0, 0)
+            tex:SetPoint("BOTTOMRIGHT", row, "TOPRIGHT",  0, -1)
+        elseif corner == "BOTTOMLEFT" then
+            tex:SetPoint("TOPLEFT",     row, "BOTTOMLEFT", 0, 1)
+            tex:SetPoint("BOTTOMRIGHT", row, "BOTTOM",     0, 0)
+        else  -- BOTTOMRIGHT
+            tex:SetPoint("TOPLEFT",     row, "BOTTOM",      0, 1)
+            tex:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+        end
         if fadeFromCenter then
             tex:SetGradient("HORIZONTAL",
                 CreateColor(1, 0.82, 0, 0.85),
@@ -143,10 +164,10 @@ function O.BuildSelectionHighlight(row, rowH)
 
     local bandL = MakeBand("BACKGROUND", "LEFT",  false)
     local bandR = MakeBand("BACKGROUND", "RIGHT", true)
-    local topL  = MakeRule("TOPLEFT",     nil, false)
-    local topR  = MakeRule("TOPRIGHT",    nil, true)
-    local botL  = MakeRule("BOTTOMLEFT",  nil, false)
-    local botR  = MakeRule("BOTTOMRIGHT", nil, true)
+    local topL  = MakeRule("TOPLEFT",     false)
+    local topR  = MakeRule("TOPRIGHT",    true)
+    local botL  = MakeRule("BOTTOMLEFT",  false)
+    local botR  = MakeRule("BOTTOMRIGHT", true)
 
     return { bandL, bandR, topL, topR, botL, botR }
 end
