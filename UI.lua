@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: UI Module
 -- Colors, branded print, backdrop, fade, tooltip, draggable, status bar

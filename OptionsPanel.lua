@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: OptionsPanel
 -- Thin loader - the actual implementation lives in Options/*.lua

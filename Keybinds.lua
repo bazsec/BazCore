@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: Keybinds Module
 -- Override keybinding framework with capture UI

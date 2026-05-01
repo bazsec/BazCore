@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: Profiles Module
 -- Unified profile system - one profile controls all Baz Suite addons

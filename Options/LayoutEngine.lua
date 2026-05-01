@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore Options: Layout Engine
 -- Renders widgets in single-column or two-column bordered panel layout.

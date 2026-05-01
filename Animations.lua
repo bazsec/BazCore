@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: Animations Module
 -- Reusable animation presets: pulse, bounce, flash, slide

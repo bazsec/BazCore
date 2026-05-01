@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: Timers Module
 -- Managed timers, throttle, debounce with per-addon cleanup

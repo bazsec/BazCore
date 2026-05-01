@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: Menu Module
 -- Declarative wrapper around MenuUtil.CreateContextMenu

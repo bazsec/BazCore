@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: Compartment Module
 -- Addon Compartment integration (Dragonflight+ minimap dropdown)

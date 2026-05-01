@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore Options: Widget Factories
 -- Each factory creates a UI widget and returns (frame, height).

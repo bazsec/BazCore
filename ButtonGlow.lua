@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore: ButtonGlow Module
 -- Original spell proc overlay glow using animation groups

@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore Options: Constants & Shared Helpers
 -- Layout dimensions, fonts, colors, backdrops, and utility functions

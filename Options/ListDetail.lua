@@ -1,3 +1,4 @@
+-- SPDX-License-Identifier: GPL-2.0-or-later
 ---------------------------------------------------------------------------
 -- BazCore Options: List/Detail Split Panel
 -- Gold text links on dark background (Traveler's Log style).
