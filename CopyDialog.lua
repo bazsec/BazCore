@@ -103,22 +103,36 @@ local function CreateDialog()
     x:SetPoint("TOPRIGHT", 0, 0)
     x:SetScript("OnClick", close)
 
-    -- Scrollable EditBox
-    local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    -- Scrollable EditBox using the same MinimalScrollBar pattern the
+    -- Options window / list-detail / User Manual panels use - so the
+    -- copy dialog visually matches the rest of the BazCore UI rather
+    -- than the chunky stock UIPanelScrollFrameTemplate look.
+    local scroll = CreateFrame("ScrollFrame", nil, f)
     scroll:SetPoint("TOPLEFT", 16, -56)
-    scroll:SetPoint("BOTTOMRIGHT", -34, 50)
+    scroll:SetPoint("BOTTOMRIGHT", -22, 50)   -- leaves room for scrollbar
+    scroll:EnableMouseWheel(true)
     f.scroll = scroll
 
+    local scrollBar = CreateFrame("EventFrame", nil, f, "MinimalScrollBar")
+    scrollBar:SetPoint("TOPLEFT",     scroll, "TOPRIGHT",    2, 0)
+    scrollBar:SetPoint("BOTTOMLEFT",  scroll, "BOTTOMRIGHT", 2, 0)
+    if ScrollUtil and ScrollUtil.InitScrollFrameWithScrollBar then
+        ScrollUtil.InitScrollFrameWithScrollBar(scroll, scrollBar)
+    end
+    f.scrollBar = scrollBar
+
+    -- The edit area: a child frame inside the scroll, sized to the
+    -- scroll's width with a backdrop matching the Options panels.
     local editFrame = CreateFrame("Frame", nil, scroll, "BackdropTemplate")
-    editFrame:SetSize(DEFAULT_W - 50, DEFAULT_H - 110)
+    editFrame:SetSize(DEFAULT_W - 38, DEFAULT_H - 110)
     editFrame:SetBackdrop({
-        bgFile   = "Interface/Tooltips/UI-Tooltip-Background",
-        edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        tile     = true, tileSize = 16, edgeSize = 8,
-        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+        bgFile   = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile     = false, edgeSize = 8,
+        insets   = { left = 2, right = 2, top = 2, bottom = 2 },
     })
-    editFrame:SetBackdropColor(0, 0, 0, 0.5)
-    editFrame:SetBackdropBorderColor(0.3, 0.25, 0.15, 0.7)
+    editFrame:SetBackdropColor(0.03, 0.03, 0.05, 0.6)
+    editFrame:SetBackdropBorderColor(0.25, 0.25, 0.3, 0.6)
     scroll:SetScrollChild(editFrame)
     f.editFrame = editFrame
 
@@ -183,13 +197,12 @@ end
 
 -- Resize the editFrame to match the dialog's interior so the EditBox
 -- has correct width for word-wrap. Called whenever the dialog size
--- changes from its previous opts.
+-- changes from its previous opts. Insets account for: 16px left edge,
+-- 22px right edge (scroll + scrollbar), 56px top, 50px bottom.
 local function ApplySize(f, w, h)
     f:SetSize(w, h)
-    -- Editor area sits between (TOPLEFT 16, -56) and (BOTTOMRIGHT -34, 50).
-    -- The editFrame inside the scroll mirrors that interior.
-    f.editFrame:SetSize(w - 50, h - 110)
-    f.editBox:SetWidth(w - 50 - 16)
+    f.editFrame:SetSize(w - 38, h - 110)
+    f.editBox:SetWidth(w - 38 - 16)
 end
 
 function BazCore:OpenCopyDialog(opts)
