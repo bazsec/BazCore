@@ -81,16 +81,36 @@ BazCore._SettingsSpecs = specs
 -- Format helpers
 ---------------------------------------------------------------------------
 
-local FORMAT_PRESETS = {
+-- Format presets exist in TWO shapes because the Options page's range
+-- widget calls string.format(opt.format, val) (printf-string semantics)
+-- while the EditMode slider calls opt.format(val) (function semantics).
+-- Same preset name, different output type per surface.
+local FORMAT_PRESETS_FN = {
     percent = function(v) return math.floor((v or 0) * 100 + 0.5) .. "%" end,
     seconds = function(v) return string.format("%.1fs", v or 0) end,
     px      = function(v) return math.floor((v or 0) + 0.5) .. " px" end,
     integer = function(v) return tostring(math.floor((v or 0) + 0.5)) end,
 }
 
-local function ResolveFormat(fmt)
+-- printf-style format strings for the Options page's string.format()
+-- code path. `percent` is omitted because Options has its own
+-- isPercent=true flag for that case.
+local FORMAT_PRESETS_PRINTF = {
+    seconds = "%.1fs",
+    px      = "%d px",
+    integer = "%d",
+}
+
+local function ResolveFormatFn(fmt)
     if type(fmt) == "function" then return fmt end
-    if type(fmt) == "string"   then return FORMAT_PRESETS[fmt] end
+    if type(fmt) == "string"   then return FORMAT_PRESETS_FN[fmt] end
+    return nil
+end
+
+local function ResolveFormatPrintf(fmt)
+    if type(fmt) == "string" then return FORMAT_PRESETS_PRINTF[fmt] end
+    -- Function-format custom strings can't be expressed as printf;
+    -- the Options widget falls back to default formatting in that case.
     return nil
 end
 
@@ -192,11 +212,16 @@ local function BuildOptionsArgsForEntry(e)
         out.min    = e.min
         out.max    = e.max
         out.step   = e.step
-        local fn = ResolveFormat(e.format)
         if e.format == "percent" then
             out.isPercent = true
-        elseif fn then
-            out.format = fn
+        else
+            -- Options' range widget consumes opt.format as a printf
+            -- string via string.format(). Function-style formats can't
+            -- be passed directly here; the widget falls back to its
+            -- step-based default ("%.1f" for sub-1 steps, integer
+            -- otherwise) which is good enough for custom-format cases.
+            local fmt = ResolveFormatPrintf(e.format)
+            if fmt then out.format = fmt end
         end
     elseif e.type == "toggle" then
         out.type  = "toggle"
@@ -314,7 +339,7 @@ local function BuildEditModeWidgetForEntry(e, sectionLabel)
         out.min    = e.min
         out.max    = e.max
         out.step   = e.step
-        out.format = ResolveFormat(e.format)
+        out.format = ResolveFormatFn(e.format)
     elseif e.type == "toggle" then
         out.type = "checkbox"
     elseif e.type == "select" then
