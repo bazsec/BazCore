@@ -371,6 +371,28 @@ local function CreateSettingDropdown(parent, widgetDef)
     row.options = options
     row.selectedValue = nil
 
+    -- Refresh enabled-state from widgetDef.disabled() callback. Polled
+    -- via OnUpdate (throttled) so the dropdown reacts live to other
+    -- widgets toggling its disabled state. Greyed visually + click
+    -- disabled + (optional) `disabledLabel` shown instead of value.
+    row.UpdateDisabled = function(self)
+        local isDisabled = (widgetDef.disabled and widgetDef.disabled())
+            and true or false
+        if isDisabled == self._lastDisabled then return end
+        self._lastDisabled = isDisabled
+        if isDisabled then
+            btn:Disable()
+            text:SetTextColor(0.5, 0.5, 0.5)
+            if widgetDef.disabledLabel then
+                btn:SetDefaultText(widgetDef.disabledLabel)
+            end
+        else
+            btn:Enable()
+            text:SetTextColor(NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+            if self.selectedValue then self:SetValue(self.selectedValue) end
+        end
+    end
+
     row.SetValue = function(self, val)
         self.selectedValue = val
         local found = false
@@ -384,6 +406,7 @@ local function CreateSettingDropdown(parent, widgetDef)
         if not found then
             btn:SetDefaultText("Custom")
         end
+        self:UpdateDisabled()
     end
 
     row.Setup = function(self)
@@ -397,6 +420,19 @@ local function CreateSettingDropdown(parent, widgetDef)
                     end
                 end)
             end
+        end)
+    end
+
+    -- Live-poll disabled state at ~5 Hz when a callback is provided.
+    -- Cheap (a single bool compare per tick) and avoids needing a
+    -- popup-wide refresh API. Only registers OnUpdate when actually
+    -- needed (most widgets don't use disabled, so they pay nothing).
+    if widgetDef.disabled then
+        row:SetScript("OnUpdate", function(self, elapsed)
+            self._t = (self._t or 0) + elapsed
+            if self._t < 0.2 then return end
+            self._t = 0
+            self:UpdateDisabled()
         end)
     end
 
