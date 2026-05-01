@@ -313,13 +313,27 @@ local function CreateExecuteWidget(parent, opt, contentWidth)
 
     btn:SetScript("OnClick", function()
         if opt.confirm then
-            StaticPopupDialogs["BAZCORE_CONFIRM_EXEC"] = {
-                text = opt.confirmText or "Are you sure?",
-                button1 = "Yes", button2 = "No",
-                OnAccept = function() if opt.func then opt.func() end end,
-                timeout = 0, whileDead = true, hideOnEscape = true,
-            }
-            StaticPopup_Show("BAZCORE_CONFIRM_EXEC")
+            -- Route through BazCore:Confirm so the popup matches the rest
+            -- of the BazCore UI (same fonts, buttons, backdrop). The
+            -- caller can opt into a destructive (red) accept button by
+            -- setting confirmStyle = "destructive" on the option entry,
+            -- or pass confirmAcceptLabel / confirmCancelLabel for custom
+            -- button text. Defaults preserve the old "Yes / No" feel.
+            if BazCore.Confirm then
+                BazCore:Confirm({
+                    title       = opt.confirmTitle or "Confirm",
+                    body        = opt.confirmText  or "Are you sure?",
+                    acceptLabel = opt.confirmAcceptLabel or "Yes",
+                    cancelLabel = opt.confirmCancelLabel or "No",
+                    acceptStyle = opt.confirmStyle or "primary",
+                    onAccept    = function() if opt.func then opt.func() end end,
+                })
+            elseif opt.func then
+                -- Pre-Popup BazCore (089-): silently fall through to the
+                -- action so the click isn't lost. Should never trigger
+                -- in practice since this file ships in the same package.
+                opt.func()
+            end
         else
             if opt.func then opt.func() end
         end
