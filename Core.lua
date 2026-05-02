@@ -103,6 +103,36 @@ function BazCore:RegisterAddon(name, config)
     }, AddonMixin)
     self.addonObjects[name] = addon
 
+    -- Capture the calling file's per-addon shared table (the second
+    -- vararg `(...)` in standard WoW addon Lua, conventionally named
+    -- `addon` or `BazXXX` in the file's locals). This is where
+    -- modules typically attach themselves (addon.Replica = Replica,
+    -- addon.Window = Window, etc.) - i.e. the actual namespace tree
+    -- the CPU profiler's drill-down walker needs to find functions
+    -- in. WoW doesn't expose these tables anywhere by default, so we
+    -- fish it out of the caller's locals via the debug API. Stored
+    -- on BazCore.addonNamespaces[name] keyed by addon name.
+    --
+    -- Looks for a table-typed local named "addon" (the convention
+    -- across the Baz suite) in the caller's frame. Falls back to
+    -- scanning all locals for the first table that contains common
+    -- addon-shared keys, so non-conforming naming still works.
+    self.addonNamespaces = self.addonNamespaces or {}
+    if debug and debug.getlocal then
+        local found
+        local i = 1
+        while true do
+            local lname, lval = debug.getlocal(2, i)
+            if not lname then break end
+            if type(lval) == "table" and (lname == "addon" or lname == name) then
+                found = lval
+                break
+            end
+            i = i + 1
+        end
+        if found then self.addonNamespaces[name] = found end
+    end
+
     -- Deferred init on ADDON_LOADED
     EventUtil.ContinueOnAddOnLoaded(name, function()
         -- Initialize saved variables (for addons that still have their own SV, e.g. BNC history)

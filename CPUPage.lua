@@ -844,31 +844,30 @@ end
 ---------------------------------------------------------------------------
 
 local function GetCPUPage()
-    return {
-        name = "CPU",
-        type = "group",
-        args = {
-            intro = {
-                order = 1,
-                type  = "lead",
-                text  = "Live snapshot of Baz Suite CPU consumption. " ..
-                        "The summary + graph below cover the last 60 " ..
-                        "seconds in real time. The Top Consumers section " ..
-                        "uses the persistent log (one sample per minute, " ..
-                        "kept across /reload) to surface the addons " ..
-                        "burning the most CPU over the longer window.",
-            },
-            -- Setup card auto-hides itself when scriptProfile is on,
-            -- so it's safe to always emit. When visible it sits above
-            -- the rest of the page with a warm-orange border.
-            setup = {
-                order = 2,
-                type  = "cpuSetup",
-            },
-            summary = {
-                order = 3,
-                type  = "cpuSummary",
-            },
+    -- Only emit the setup card when profiling is actually off. The
+    -- LayoutEngine reserves vertical space based on each block's
+    -- factory-reported height, so leaving the block in the args and
+    -- having the factory hide its frame would still leak ~130px of
+    -- empty space below the intro. Conditional emit keeps the layout
+    -- tight when profiling is on - the most common state once the
+    -- user has enabled it once.
+    local profilingOn = GetCVarBool and GetCVarBool("scriptProfile") or false
+
+    local args = {
+        intro = {
+            order = 1,
+            type  = "lead",
+            text  = "Live snapshot of Baz Suite CPU consumption. " ..
+                    "The summary + graph below cover the last 60 " ..
+                    "seconds in real time. The Top Consumers section " ..
+                    "uses the persistent log (one sample per minute, " ..
+                    "kept across /reload) to surface the addons " ..
+                    "burning the most CPU over the longer window.",
+        },
+        summary = {
+            order = 3,
+            type  = "cpuSummary",
+        },
             perAddonHeader = {
                 order = 10,
                 type  = "h2",

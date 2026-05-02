@@ -356,18 +356,37 @@ function BazCore:GetAddonFunctionCPU(addonName, opts)
     if not addonName then return {} end
     if not GetFunctionCPUUsage then return {} end
 
-    -- Collect the root namespaces to walk. Most Baz addons expose:
-    --   _G[addonName]           - the public global (BazChat, BazBars, ...)
-    --   BazCore.addons[name]    - the addon-config table from RegisterAddon
-    -- Some addons (BNC) also expose a short alias - cover the
-    -- common ones. Identity-deduped via the `visited` set so we
-    -- don't double-count functions reachable through multiple paths.
+    -- Collect the root namespaces to walk. The big one is
+    -- BazCore.addonNamespaces[name] - the per-file shared `addon`
+    -- table captured at RegisterAddon time, where most Baz addons
+    -- attach their modules (addon.Replica, addon.Window, addon.Tabs,
+    -- etc.). Without this, the walker would only find what the
+    -- addon's public _G global exposes, which is usually just a
+    -- handful of methods. Plus the public global, the addon-config
+    -- table, and the AddonMixin object for completeness. Identity-
+    -- deduped via the `visited` set so a function reachable through
+    -- multiple paths gets queried once.
     local roots = {}
+    if BazCore.addonNamespaces and BazCore.addonNamespaces[addonName] then
+        roots[#roots + 1] = {
+            name = addonName,
+            t    = BazCore.addonNamespaces[addonName],
+        }
+    end
+    if BazCore.addonObjects and BazCore.addonObjects[addonName] then
+        roots[#roots + 1] = {
+            name = addonName .. "(obj)",
+            t    = BazCore.addonObjects[addonName],
+        }
+    end
     if _G[addonName] and type(_G[addonName]) == "table" then
         roots[#roots + 1] = { name = addonName, t = _G[addonName] }
     end
     if BazCore.addons and BazCore.addons[addonName] then
-        roots[#roots + 1] = { name = addonName, t = BazCore.addons[addonName] }
+        roots[#roots + 1] = {
+            name = addonName .. "(config)",
+            t    = BazCore.addons[addonName],
+        }
     end
     if addonName == "BazNotificationCenter" and _G.BNC then
         roots[#roots + 1] = { name = "BNC", t = _G.BNC }
