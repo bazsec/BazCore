@@ -348,10 +348,49 @@ end
 --   msSelf = own-body ms (children excluded)
 ---------------------------------------------------------------------------
 
+-- Detect Blizzard / WoW UI frames - tables whose metatable's __index
+-- exposes the standard Frame method `GetObjectType`. We skip these in
+-- the walker because (a) recursing through frame method tables is
+-- enormous and exposes internal Blizzard tables we don't want to
+-- profile, and (b) calling GetFunctionCPUUsage on certain C-backed
+-- frame methods can crash the client.
+local function IsBlizzardFrame(t)
+    if type(t) ~= "table" then return false end
+    -- Frames respond to GetObjectType via their metatable's __index
+    -- chain. rawget guards against any custom __index that might
+    -- throw or recurse into us.
+    local mt = getmetatable(t)
+    if not mt then return false end
+    local idx = rawget(mt, "__index")
+    if type(idx) == "table"
+       and type(rawget(idx, "GetObjectType")) == "function" then
+        return true
+    end
+    -- Some addons put GetObjectType directly on the frame table.
+    if type(rawget(t, "GetObjectType")) == "function" then
+        return true
+    end
+    return false
+end
+
+-- Some keys under an addon's namespace point at known-bad-to-recurse
+-- targets even when they're not Frame instances - things like the SV
+-- root, the BazCore addon-config table itself (we already walk it
+-- separately), or an addon's `core` field that loops back to BazCore.
+local function ShouldSkipKey(k)
+    if type(k) ~= "string" then return false end
+    if k == "core"      then return true end  -- loop back to BazCore
+    if k == "config"    then return true end  -- big options table
+    if k == "db"        then return true end  -- SV proxy
+    if k == "VERSION"   then return true end  -- string, harmless but noise
+    return false
+end
+
 function BazCore:GetAddonFunctionCPU(addonName, opts)
     opts = opts or {}
-    local maxDepth = opts.maxDepth or 4
-    local minMs    = opts.minMs    or 0   -- filter out zero-cost noise
+    local maxDepth     = opts.maxDepth     or 3      -- conservative
+    local minMs        = opts.minMs        or 0
+    local maxFunctions = opts.maxFunctions or 2000   -- upper bound
 
     if not addonName then return {} end
     if not GetFunctionCPUUsage then return {} end
@@ -400,25 +439,49 @@ function BazCore:GetAddonFunctionCPU(addonName, opts)
     local seenFn  = {}
     local visited = {}
 
+    -- Wrap pairs() in pcall so a custom __pairs metamethod that errors
+    -- (or any other table-iter pathology) doesn't kill the whole walk.
+    local function safePairs(t)
+        local ok, iter, state, ctrl = pcall(pairs, t)
+        if not ok then return function() end end
+        return iter, state, ctrl
+    end
+
+    -- Wrap GetFunctionCPUUsage too. Calling it on certain C-backed
+    -- functions has been reported to crash the client - belt + braces.
+    local function safeCPU(fn, includeChildren)
+        local ok, v = pcall(GetFunctionCPUUsage, fn, includeChildren)
+        if ok and type(v) == "number" then return v end
+        return 0
+    end
+
     local function walk(t, prefix, depth)
         if visited[t] or depth > maxDepth then return end
+        if IsBlizzardFrame(t) then return end       -- crash guard
+        if #results >= maxFunctions then return end -- cap to keep dump readable
         visited[t] = true
-        for k, v in pairs(t) do
-            local kstr = tostring(k)
-            local path = prefix == "" and kstr or (prefix .. "." .. kstr)
-            if type(v) == "function" and not seenFn[v] then
-                seenFn[v] = true
-                local ms     = GetFunctionCPUUsage(v, true)  or 0
-                local msSelf = GetFunctionCPUUsage(v, false) or 0
-                if ms >= minMs then
-                    results[#results + 1] = {
-                        path   = path,
-                        ms     = ms,
-                        msSelf = msSelf,
-                    }
+
+        for k, v in safePairs(t) do
+            if not ShouldSkipKey(k) then
+                local kstr = tostring(k)
+                local path = prefix == "" and kstr or (prefix .. "." .. kstr)
+                if type(v) == "function" and not seenFn[v] then
+                    seenFn[v] = true
+                    local ms     = safeCPU(v, true)
+                    local msSelf = safeCPU(v, false)
+                    if ms >= minMs then
+                        results[#results + 1] = {
+                            path   = path,
+                            ms     = ms,
+                            msSelf = msSelf,
+                        }
+                    end
+                    if #results >= maxFunctions then return end
+                elseif type(v) == "table"
+                       and not visited[v]
+                       and not IsBlizzardFrame(v) then
+                    walk(v, path, depth + 1)
                 end
-            elseif type(v) == "table" and not visited[v] then
-                walk(v, path, depth + 1)
             end
         end
     end
