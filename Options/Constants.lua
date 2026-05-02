@@ -47,6 +47,14 @@ O.LIST_HOVER     = { 0.1, 0.2, 0.4, 0.3 }
 O.LIST_SELECTED  = { 0.15, 0.35, 0.6, 0.6 }
 O.HEADER_LINE    = { 0.4, 0.35, 0.2, 0.8 }
 
+-- Floating-dialog colours (Popup, CopyDialog, IconPicker). Brighter
+-- and more opaque than the inline PANEL_* tones so a popup floating
+-- over arbitrary game content (the world, a Blizzard frame, etc.)
+-- stays clearly delineated. Inline panels keep PANEL_BG / PANEL_BORDER
+-- since they sit on the already-textured Options window backdrop.
+O.DIALOG_BG      = { 0.04, 0.04, 0.06, 0.95 }
+O.DIALOG_BORDER  = { 0.4,  0.35, 0.2,  0.95 }
+
 ---------------------------------------------------------------------------
 -- Backdrops
 ---------------------------------------------------------------------------

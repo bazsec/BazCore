@@ -133,8 +133,12 @@ local function CreatePopupFrame()
     f:SetScript("OnDragStop",  f.StopMovingOrSizing)
     f:SetClampedToScreen(true)
     f:SetBackdrop(O.LIST_BACKDROP)
-    f:SetBackdropColor(unpack(O.PANEL_BG))
-    f:SetBackdropBorderColor(unpack(O.PANEL_BORDER))
+    -- DIALOG_* tones rather than the inline PANEL_* tones - this is a
+    -- floating dialog so the border needs to read clearly against
+    -- arbitrary game content behind it, and the bg should be solid
+    -- enough to feel modal rather than translucent over the world.
+    f:SetBackdropColor(unpack(O.DIALOG_BG))
+    f:SetBackdropBorderColor(unpack(O.DIALOG_BORDER))
     f:SetPoint("CENTER")
     f:Hide()
 
