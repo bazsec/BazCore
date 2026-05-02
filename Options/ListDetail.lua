@@ -18,6 +18,18 @@ local O = BazCore._Options
 ---------------------------------------------------------------------------
 
 function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, executeArgs)
+    -- Selection + collapse state persistence target. `container` is
+    -- typically a renderTarget Frame that gets discarded on every
+    -- RefreshOptions call (Registration.lua's RenderIntoCanvas
+    -- recreates it from scratch each render to avoid orphaned-frame
+    -- bugs). Storing _lastSelectedItem on it would lose the user's
+    -- selection every time they edit any option in the detail pane.
+    -- Walk up to the longest-lived ancestor we have (window.content)
+    -- and stash there with a key derived from groupOpt.name, so
+    -- multiple list-details on different subcategories don't collide.
+    local stateHost = container:GetParent() or container
+    local stateKey  = "_bazListDetail_" .. tostring(groupOpt.name or "default")
+
     -- Split frame: anchors to bottom of container to fill space
     local splitFrame = CreateFrame("Frame", nil, container)
     splitFrame:SetPoint("TOPLEFT", container, "TOPLEFT", O.PAD, yOffset)
@@ -114,17 +126,25 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     end
 
     -- Selection is tracked by the child's `name` string (stable across
-    -- list rebuilds when sections are expanded/collapsed). Falls back
-    -- to nil if the previously selected item no longer exists.
-    local selectedKey = container._lastSelectedItem
+    -- list rebuilds when sections are expanded/collapsed). Persisted
+    -- on stateHost (window.content) so it survives RefreshOptions
+    -- rebuilds. Falls back to nil if the previously selected item
+    -- no longer exists in the rebuilt list.
+    local selectionState = stateHost[stateKey]
+    if type(selectionState) ~= "table" then
+        selectionState = {}
+        stateHost[stateKey] = selectionState
+    end
+    local selectedKey = selectionState.selected
     -- Legacy: older sessions stored an integer index. Drop it - the
     -- restore path below will pick the first available group instead.
     if type(selectedKey) ~= "string" then selectedKey = nil end
 
-    -- Per-source collapse state survives within the panel's lifetime
-    -- (resets on /reload). Storing in `container` matches how
-    -- _lastSelectedItem already persists across page navigations.
-    container._collapsedSources = container._collapsedSources or {}
+    -- Per-source collapse state lives in the same persistent state
+    -- bucket so it also survives RefreshOptions rebuilds (resets on
+    -- /reload, when the entire window goes away).
+    selectionState.collapsedSources = selectionState.collapsedSources or {}
+    local collapsedSources = selectionState.collapsedSources
 
     local listButtons = {}     -- list of clickable child rows (filtered by collapse state)
     local rowsByChild = {}     -- [child] = button, for highlight updates
@@ -166,7 +186,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
     local function SelectGroup(child)
         if not child then return end
         selectedKey = child.name
-        container._lastSelectedItem = selectedKey
+        selectionState.selected = selectedKey
         RenderList()
         RenderDetailFor(child)
     end
@@ -194,7 +214,7 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
             for _, src in ipairs(sourceOrder) do
                 local capturedSrc = src
                 local sourceKey   = "__source_" .. capturedSrc
-                local collapsed   = container._collapsedSources[capturedSrc] or false
+                local collapsed   = collapsedSources[capturedSrc] or false
                 -- Source headers are selectable like User Manual tree
                 -- parents: a click toggles expansion AND turns the
                 -- header text white, matching the User Manual look.
@@ -211,10 +231,10 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
                     expanded   = not collapsed,
                     isSelected = (sourceKey == selectedKey),
                     onClick    = function()
-                        container._collapsedSources[capturedSrc] =
-                            not container._collapsedSources[capturedSrc]
+                        collapsedSources[capturedSrc] =
+                            not collapsedSources[capturedSrc]
                         selectedKey = sourceKey
-                        container._lastSelectedItem = selectedKey
+                        selectionState.selected = selectedKey
                         RenderList()
                     end,
                 }
@@ -284,8 +304,8 @@ function O.BuildListDetailPanel(container, groupOpt, contentWidth, yOffset, exec
             -- If the restored child sits inside a collapsed source,
             -- expand that source so the user sees their selection.
             if hasSourceGrouping and restore.source
-               and container._collapsedSources[restore.source] then
-                container._collapsedSources[restore.source] = false
+               and collapsedSources[restore.source] then
+                collapsedSources[restore.source] = false
                 RenderList()
             end
             SelectGroup(restore)
