@@ -363,19 +363,22 @@ end
 
 local function CreateSelectWidget(parent, opt, contentWidth)
     local frame = CreateFrame("Frame", nil, parent)
-    frame:SetSize(contentWidth, 50)
+    frame:SetSize(contentWidth, 54)
 
     local label = frame:CreateFontString(nil, "OVERLAY", O.LABEL_FONT)
     label:SetPoint("TOPLEFT", 0, 0)
     label:SetText(opt.name or "")
 
-    local btn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    -- WowStyle1DropdownTemplate is the modern Blizzard dropdown widget
+    -- (chevron arrow on the right, bordered box, checkmark on the
+    -- selected item via SetupMenu/CreateRadio). Same template the Edit
+    -- Mode framework uses, so dropdowns look identical across the
+    -- Options page and Edit Mode popups.
+    local btn = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
     btn:SetPoint("TOPLEFT", 0, -22)
-    btn:SetHeight(22)
 
-    -- Measuring FontString - same family as UIPanelButtonTemplate uses,
-    -- hidden so it doesn't render. We poke text into it just to read
-    -- back the rendered width without disturbing the button's label.
+    -- Measuring FontString for sizing the dropdown to the widest value
+    -- so labels never get clipped. Hidden so it doesn't render.
     local probe = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     probe:Hide()
 
@@ -385,14 +388,12 @@ local function CreateSelectWidget(parent, opt, contentWidth)
         return v or {}
     end
 
-    -- Size the button to the WIDEST value text in the dropdown so the
-    -- label never overflows the button chrome (the previous fixed
-    -- 200 px cap clipped strings like "Sections (header + grid per
-    -- category)"). 24 px of padding accounts for the template's
-    -- internal margins on each side; clamped to contentWidth as the
-    -- absolute upper bound and 80 px as a sensible lower bound.
-    local MIN_W = 80
-    local PADDING = 24
+    -- Size the dropdown to the WIDEST value text plus chrome padding.
+    -- 36 px accounts for the template's left padding + the chevron
+    -- arrow on the right; clamped to contentWidth as the absolute
+    -- upper bound and 100 px as a sensible lower bound.
+    local MIN_W = 100
+    local PADDING = 36
     local function ResizeToFitLongest()
         local values = GetValues()
         local maxW = MIN_W
@@ -408,31 +409,41 @@ local function CreateSelectWidget(parent, opt, contentWidth)
     local function UpdateLabel()
         local val = opt.get and opt.get()
         local values = GetValues()
-        btn:SetText(values[val] or val or "Select...")
+        btn:SetDefaultText(values[val] or val or "Select...")
     end
+
+    -- The dropdown menu itself is built lazily on each open via
+    -- SetupMenu's callback. CreateRadio gives the modern checkmark-on-
+    -- selected-row appearance instead of a flat clickable list.
+    btn:SetupMenu(function(dropdown, rootDescription)
+        local values = GetValues()
+        local currentVal = opt.get and opt.get()
+        for k, v in pairs(values) do
+            rootDescription:CreateRadio(
+                v,
+                function() return currentVal == k end,
+                function()
+                    if opt.set then opt.set(nil, k) end
+                    UpdateLabel()
+                end
+            )
+        end
+    end)
 
     UpdateLabel()
     ResizeToFitLongest()
 
-    btn:SetScript("OnClick", function(self)
-        local values = GetValues()
-        MenuUtil.CreateContextMenu(self, function(owner, rootDescription)
-            for k, v in pairs(values) do
-                rootDescription:CreateButton(v, function()
-                    if opt.set then opt.set(nil, k) end
-                    UpdateLabel()
-                end)
-            end
-        end)
-    end)
-
     frame:SetScript("OnShow", function()
         UpdateLabel()
         ResizeToFitLongest()
-        btn:SetEnabled(not O.IsDisabled(opt))
+        if O.IsDisabled(opt) then
+            btn:Disable()
+        else
+            btn:Enable()
+        end
     end)
 
-    return frame, 50
+    return frame, 54
 end
 
 ---------------------------------------------------------------------------
