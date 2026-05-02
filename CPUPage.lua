@@ -961,7 +961,22 @@ local function GetCPUPage()
                     end
                 end,
             },
-        },
+    }
+
+    -- Conditional setup card: only added to the args when profiling is
+    -- off, so the LayoutEngine doesn't reserve any vertical space for
+    -- it once the user has profiling enabled.
+    if not profilingOn then
+        args.setup = {
+            order = 2,
+            type  = "cpuSetup",
+        }
+    end
+
+    return {
+        name = "CPU",
+        type = "group",
+        args = args,
     }
 end
 
