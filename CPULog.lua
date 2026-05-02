@@ -333,6 +333,109 @@ function BazCore:IsCPUProfilingEnabled()
     return IsProfilingEnabled()
 end
 
+---------------------------------------------------------------------------
+-- Per-function drill-down
+--
+-- GetFunctionCPUUsage(func, includeChildren) returns cumulative ms per
+-- function reference, but you need the actual function refs to call it
+-- on. Walk the addon's globals + its BazCore-registered table looking
+-- for functions, deduping by identity, then rank descending. Includes
+-- nested tables (addon.Module.SomeMethod) up to a depth cap so deeply
+-- nested helpers are still visible.
+--
+-- Returns: array of { path, ms, msSelf } sorted by ms desc, where
+--   ms     = cumulative ms including children
+--   msSelf = own-body ms (children excluded)
+---------------------------------------------------------------------------
+
+function BazCore:GetAddonFunctionCPU(addonName, opts)
+    opts = opts or {}
+    local maxDepth = opts.maxDepth or 4
+    local minMs    = opts.minMs    or 0   -- filter out zero-cost noise
+
+    if not addonName then return {} end
+    if not GetFunctionCPUUsage then return {} end
+
+    -- Collect the root namespaces to walk. Most Baz addons expose:
+    --   _G[addonName]           - the public global (BazChat, BazBars, ...)
+    --   BazCore.addons[name]    - the addon-config table from RegisterAddon
+    -- Some addons (BNC) also expose a short alias - cover the
+    -- common ones. Identity-deduped via the `visited` set so we
+    -- don't double-count functions reachable through multiple paths.
+    local roots = {}
+    if _G[addonName] and type(_G[addonName]) == "table" then
+        roots[#roots + 1] = { name = addonName, t = _G[addonName] }
+    end
+    if BazCore.addons and BazCore.addons[addonName] then
+        roots[#roots + 1] = { name = addonName, t = BazCore.addons[addonName] }
+    end
+    if addonName == "BazNotificationCenter" and _G.BNC then
+        roots[#roots + 1] = { name = "BNC", t = _G.BNC }
+    end
+
+    if #roots == 0 then return {} end
+
+    if UpdateAddOnCPUUsage then UpdateAddOnCPUUsage() end
+
+    local results = {}
+    local seenFn  = {}
+    local visited = {}
+
+    local function walk(t, prefix, depth)
+        if visited[t] or depth > maxDepth then return end
+        visited[t] = true
+        for k, v in pairs(t) do
+            local kstr = tostring(k)
+            local path = prefix == "" and kstr or (prefix .. "." .. kstr)
+            if type(v) == "function" and not seenFn[v] then
+                seenFn[v] = true
+                local ms     = GetFunctionCPUUsage(v, true)  or 0
+                local msSelf = GetFunctionCPUUsage(v, false) or 0
+                if ms >= minMs then
+                    results[#results + 1] = {
+                        path   = path,
+                        ms     = ms,
+                        msSelf = msSelf,
+                    }
+                end
+            elseif type(v) == "table" and not visited[v] then
+                walk(v, path, depth + 1)
+            end
+        end
+    end
+
+    for _, root in ipairs(roots) do
+        walk(root.t, root.name, 1)
+    end
+
+    table.sort(results, function(a, b) return a.ms > b.ms end)
+    return results
+end
+
+-- Print the top N functions for `addonName` to chat. n defaults to 20.
+function BazCore:DumpAddonFunctionCPU(addonName, n)
+    if not IsProfilingEnabled() then
+        print("|cffffd700BazCore:|r CPU profiling is off. Enable via /bazcpu enable first.")
+        return
+    end
+    local results = self:GetAddonFunctionCPU(addonName)
+    if not results or #results == 0 then
+        print("|cffffd700BazCore:|r no tracked functions found for '"
+            .. tostring(addonName) .. "'.")
+        return
+    end
+    n = n or 20
+    local shown = math.min(n, #results)
+    print(string.format("|cffffd700BazCore CPU Top %d functions for %s:|r",
+        shown, tostring(addonName)))
+    print("  ms (incl)   ms (self)   path")
+    for i = 1, shown do
+        local r = results[i]
+        print(string.format("  %9.1f   %9.1f   %s",
+            r.ms, r.msSelf, r.path))
+    end
+end
+
 -- Enable scriptProfile and reload. Bound to the page's setup-card
 -- button. SetCVar("scriptProfile", "1") returns true on success;
 -- the CVar requires a /reload before GetAddOnCPUUsage starts
@@ -434,6 +537,12 @@ SlashCmdList.BAZCPU = function(msg)
         print(string.format("|cffffd700BazCore:|r marked '%s'", label))
         return
     end
+    if lcmd == "top" then
+        local target = rest:match("^(%S+)") or "BazCore"
+        local n      = tonumber(rest:match("(%d+)%s*$")) or 20
+        BazCore:DumpAddonFunctionCPU(target, n)
+        return
+    end
 
     print("|cffffd700BazCore CPU Profile|r")
     if not IsProfilingEnabled() then
@@ -452,5 +561,5 @@ SlashCmdList.BAZCPU = function(msg)
         print(string.format("  %-22s  %.0f ms total  (%.0f ms/h)",
             g.name, g.totalMs, g.ratePerHour))
     end
-    print("|cffffd700Commands:|r /bazcpu enable | disable | mark | export | dump | reset")
+    print("|cffffd700Commands:|r /bazcpu top <addon> | enable | disable | mark | export | dump | reset")
 end
